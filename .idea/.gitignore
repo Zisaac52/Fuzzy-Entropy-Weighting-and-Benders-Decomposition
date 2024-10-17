@@ -6,3 +6,23 @@
 # Datasource local storage ignored files
 /dataSources/
 /dataSources.local.xml
+
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Data and model files
+data/
+*.pth
+
+# Log files
+*.log
+
+# 忽略所有 .pyc 文件
+*.pyc
+# 忽略所有 __pycache__ 目录
+__pycache__/
+
+# 忽略整个 MNIST 文件夹
+data/mnist/MNIST/
