@@ -1,3 +1,27 @@
+def register(address, dataSize):
+    global globalState
+    if address in globalState['uid']:
+        return False  # 节点已存在
+
+    uid = globalState['n_d']  # 分配一个新的 UID
+    globalState['uid'][address] = uid
+    globalState['n_d'] += 1  # 更新节点计数
+    
+    # 确保所有评分列表被正确初始化
+    for i in range(4):  # s有4个子列表
+        while len(globalState['s'][i]) < globalState['n_d']:
+            default_value = 0.0
+            if i == 1:  # 对于得分列表使用0.5作为默认值
+                default_value = 0.5
+            elif i == 2:  # 对于Tau值使用1作为默认值
+                default_value = 1.0
+            globalState['s'][i].append(default_value)
+    
+    globalState['scores'].append(0)
+    globalState['t'].append(time.time())
+    globalState['s'][0][uid] = dataSize  # 设置数据大小
+    
+    return True
 import base64
 import io
 import requests
@@ -43,30 +67,52 @@ globalState = {
 # 模型聚合的结果
 weights = []
 
-# 合并本地模型到全局模型
 def merge(uid, address, data):
-    print("Merging local model from node:", address)
-    alpha = getAlpha(1, int(time.time()), data['t0'], 0.003, 1, data['uid'], data['n_d'], data['s'])
-    if alpha == 0:
-        return
-    
-    localStateDict = data['local_state_dict']
-    globStateDict = data['global_state_dict']
-    
-    # 更新全局模型参数
-    for k in globStateDict.keys():
-        globStateDict[k] = (1 - alpha) * globStateDict[k] + alpha * localStateDict[k]
-
-    stateDictHex = stateDictToHex(globStateDict)
-    s = normalization(data['s'])
-    score = getTauI(uid, data['n_d'], s)
-    
-    return {
-        'model_state_hex': stateDictHex,
-        'score': score,
-        'address': address,
-        'cur_global_state_dict': globStateDict
-    }
+    try:
+        print(f"\nMerging local model from node: {address}")
+        print(f"Current state - UID: {uid}")
+        print(f"Data state: n_d={data['n_d']}, t0={data['t0']}")
+        print(f"S matrix shape: {[len(s) for s in data['s']]}")
+        
+        # 验证输入数据
+        if 'uid' not in data or 'n_d' not in data or 's' not in data:
+            print("Missing required data fields")
+            return None
+            
+        alpha = getAlpha(1, int(time.time()), data['t0'], 0.003, 1, data['uid'], data['n_d'], data['s'])
+        print(f"Calculated alpha: {alpha}")
+        
+        if alpha == 0:
+            print("Alpha is 0, skipping merge")
+            return None
+            
+        # 模型更新
+        try:
+            localStateDict = data['local_state_dict']
+            globStateDict = data['global_state_dict']
+            
+            for k in globStateDict.keys():
+                globStateDict[k] = (1 - alpha) * globStateDict[k] + alpha * localStateDict[k]
+                
+            stateDictHex = stateDictToHex(globStateDict)
+            s = normalization(data['s'])
+            score = getTauI(uid, data['n_d'], s)
+            
+            print(f"Merge completed. Score: {score}")
+            
+            return {
+                'model_state_hex': stateDictHex,
+                'score': score,
+                'address': address,
+                'cur_global_state_dict': globStateDict
+            }
+        except Exception as e:
+            print(f"Error during model update: {str(e)}")
+            return None
+            
+    except Exception as e:
+        print(f"Error in merge: {str(e)}")
+        return None
 
 # 接收并合并节点的本地模型
 @app.route('/newLocalModel/<address>', methods=['POST'])
