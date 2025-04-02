@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE configuration files
+.idea/
+.vscode/
+
+# Data files (usually large and not version controlled)
+data/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Virtual environment
+venv/
+env/
+*.env
+.env

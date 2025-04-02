@@ -1,3 +1,4 @@
+import argparse # <-- 添加导入
 import requests
 import torch
 from models.Nets import CNN
@@ -6,10 +7,19 @@ from torchvision import datasets, transforms
 from utils.dataset import test_img
 from torch.utils.data import DataLoader
 
+# 添加参数解析器
+def args_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--gpu', type=int, default=-1, help="GPU ID, -1 for CPU")
+    parser.add_argument('--port', type=int, default=8000, help="Server port")
+    args = parser.parse_args()
+    return args
+
 # 从服务器获取聚合后的模型
-def getAggregatedModel():
-    resp = requests.get('http://localhost:8000/newGlobalModel')
-    
+def getAggregatedModel(port): # <-- 添加 port 参数
+    # 使用传入的 port 构建 URL
+    resp = requests.get(f'http://localhost:{port}/newGlobalModel')
+
     # 检查响应状态码
     if resp.status_code != 200:
         print(f"Failed to retrieve model. Status code: {resp.status_code}")
@@ -33,8 +43,9 @@ def getAggregatedModel():
 
 
 # 加载模型
-def loadModelFromServer():
-    aggregated_model_hex = getAggregatedModel()
+def loadModelFromServer(port): # <-- 添加 port 参数
+    # 将 port 传递给 getAggregatedModel
+    aggregated_model_hex = getAggregatedModel(port)
 
     if aggregated_model_hex is None:
         print("Failed to load the model from server.")
@@ -52,13 +63,18 @@ def loadModelFromServer():
 
 
 if __name__ == '__main__':
-    device = torch.device('cpu')  # 明确指定使用CPU
-    model = loadModelFromServer()
+    args = args_parser() # <-- 解析参数
+    # 设备选择 (GPU 或 CPU)
+    device = torch.device('cuda' if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
+    print(f"Using device: {device}") # <-- 打印使用的设备
+
+    # 修改 loadModelFromServer 调用以传递端口
+    model = loadModelFromServer(args.port)
 
     if model is None:
         print("Model loading failed.")
     else:
-        model.to(device)  # 将模型移动到CPU
+        model.to(device) # 将模型移动到选择的设备
         model.eval()
 
         # 加载测试数据集
@@ -67,8 +83,9 @@ if __name__ == '__main__':
 
         # 使用测试函数进行模型评估
         batch_size = 64
-        acc_test, loss_test = test_img(model, dataset_test, batch_size, gpu=-1)  # 确保gpu参数为-1
+        # 将 args.gpu 传递给 test_img
+        acc_test, loss_test = test_img(model, dataset_test, batch_size, gpu=args.gpu)
 
         print(f"Global Model Test: Accuracy: {acc_test * 100:.2f}%, Average Loss: {loss_test:.4f}")
 
-    print(f"Using device: {device}")
+    # 移除了重复的 device 打印

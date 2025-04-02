@@ -26,17 +26,20 @@ import base64
 import io
 import requests
 import torch
+import copy # Import copy for deepcopy
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO
 import time
 
 from models.Nets import CNN
-from models.Fed import getDis, getAlpha, getTauI, normalization
+# Import fed_avg_aggregate if needed, but we decided against FedAvg for now
+from models.Fed import getDis, getAlpha, getTauI, normalization # BAFL functions
+from models.Fed import getAlpha_iewm, getTauI_iewm, normalization_iewm # IEWM functions
 from utils.options import args_server_parser
 from utils.models import hexToStateDict, stateDictToHex
 
 # 解析服务器参数
-args = args_server_parser()
+args = args_server_parser() # args is now available globally in this module
 
 # 初始化全局模型
 def initNetGlob():
@@ -122,28 +125,118 @@ def newLocalModel(address):
     
     global net_glob
     globalStateDict = net_glob.state_dict()  # 获取当前全局模型的状态字典
-    
     uid = globalState['uid'][address]  # 获取节点的 UID
-    globalState['s'][3][uid] = getDis(globalStateDict, localStateDict)  # 更新距离
 
-    # 合并本地模型到全局模型
-    res = merge(uid, address, {
-        "local_state_dict": localStateDict,
-        "global_state_dict": globalStateDict,
-        "s": globalState['s'],
-        "n_d": globalState['n_d'],
-        "uid": uid,
-        "t0": globalState['t'][uid]
-    })
+    if args.aggregate == 'bafl':
+        # --- Existing BAFL Logic ---
+        globalState['s'][3][uid] = getDis(globalStateDict, localStateDict) # Update distance for BAFL
 
-    if res:
-        # 更新全局状态
-        globalState['t'][uid] = time.time()
-        globalState['s'][1][uid] = float(res['score'])
-        net_glob.load_state_dict(hexToStateDict(res['model_state_hex']))  # 更新全局模型
-        print(f"Model from {address} successfully merged into global model.")
-    
-    return '1'
+        res = merge(uid, address, { # merge uses getAlpha which uses entropy weights
+            "local_state_dict": localStateDict,
+            "global_state_dict": globalStateDict,
+            "s": globalState['s'],
+            "n_d": globalState['n_d'],
+            "uid": uid,
+            "t0": globalState['t'][uid]
+        })
+
+        if res:
+            # Update global state (time, score) specific to BAFL
+            globalState['t'][uid] = time.time()
+            globalState['s'][1][uid] = float(res['score'])
+            net_glob.load_state_dict(hexToStateDict(res['model_state_hex'])) # Update global model
+            print(f"Model from {address} successfully merged into global model using BAFL.")
+        else:
+             print(f"BAFL merge returned None for node {address}. Global model not updated.")
+             print(f"BAFL merge returned None for node {address}. Global model not updated.")
+             # Decide if we should still update the timestamp
+             # globalState['t'][uid] = time.time() # Update time even if merge fails?
+
+    elif args.aggregate == 'iewm':
+        # --- Information Entropy Weight Method (IEWM) Logic ---
+        globalState['s'][3][uid] = getDis(globalStateDict, localStateDict) # Update distance metric
+
+        # Parameters for getAlpha_iewm (using similar defaults as BAFL's merge for now)
+        kexi = 1.0
+        theta = 0.003
+        R0 = 1.0
+        current_time = time.time()
+        t0 = globalState['t'][uid]
+        N_D = globalState['n_d']
+        s_metrics = globalState['s'] # Use the same metrics as BAFL for now
+
+        # Calculate alpha using IEWM functions
+        alpha_iewm = getAlpha_iewm(kexi, current_time, t0, theta, R0, uid, N_D, s_metrics)
+        print(f"Calculated IEWM alpha for node {address}: {alpha_iewm}")
+
+        if alpha_iewm > 0: # Proceed only if alpha is positive
+            updated_global_dict_iewm = copy.deepcopy(globalStateDict)
+            try:
+                for k in updated_global_dict_iewm.keys():
+                    if k in localStateDict:
+                        updated_global_dict_iewm[k] = (1.0 - alpha_iewm) * updated_global_dict_iewm[k] + alpha_iewm * localStateDict[k]
+                    else:
+                        print(f"Warning (IEWM): Key '{k}' not found in local model from {address}. Skipping update for this layer.")
+
+                net_glob.load_state_dict(updated_global_dict_iewm) # Update global model
+
+                # Update timestamp
+                globalState['t'][uid] = current_time
+
+                # Optionally calculate and update score based on IEWM's TauI
+                try:
+                    # Use the normalized metrics as used within getAlpha_iewm
+                    s_normalized_iewm = normalization_iewm(s_metrics)
+                    if s_normalized_iewm: # Check if normalization was successful
+                        score_iewm = getTauI_iewm(uid, N_D, s_normalized_iewm)
+                        globalState['s'][1][uid] = float(score_iewm)
+                        print(f"IEWM Score calculated for node {address}: {score_iewm}")
+                    else:
+                         print(f"Warning (IEWM): Normalization failed, cannot calculate score for node {address}.")
+                         globalState['s'][1][uid] = 0.5 # Reset to default?
+                except Exception as e:
+                    print(f"Error calculating IEWM score for node {address}: {e}")
+                    globalState['s'][1][uid] = 0.5 # Reset to default on error
+
+                print(f"Model from {address} successfully merged into global model using IEWM (alpha={alpha_iewm}).")
+
+            except Exception as e:
+                print(f"Error during IEWM aggregation for node {address}: {e}")
+                # Don't return '0' here as it might break client expectation of '1'
+                # Just log the error and the global model won't be updated by this client
+        else:
+            print(f"IEWM alpha is 0 or less for node {address}, skipping merge.")
+            # Optionally update timestamp even if merge is skipped?
+            # globalState['t'][uid] = current_time
+
+    elif args.aggregate == 'fedasync':
+        # --- Simple FedAsync Logic ---
+        # Use a fixed averaging factor (alpha)
+        alpha_async = 0.1 # Example fixed alpha for simple async averaging
+        updated_global_dict = copy.deepcopy(globalStateDict)
+        try:
+            for k in updated_global_dict.keys():
+                 if k in localStateDict:
+                      # Ensure tensors are on the same device and dtype if necessary
+                      # Assuming they are compatible based on previous code structure
+                      updated_global_dict[k] = (1.0 - alpha_async) * updated_global_dict[k] + alpha_async * localStateDict[k]
+                 else:
+                     print(f"Warning: Key '{k}' not found in local model from {address}. Skipping update for this layer.")
+
+            net_glob.load_state_dict(updated_global_dict) # Update global model
+            # Update timestamp, score is not calculated in simple FedAsync
+            globalState['t'][uid] = time.time()
+            # Optionally reset or ignore score: globalState['s'][1][uid] = 0.5 # Reset to default?
+            print(f"Model from {address} successfully merged into global model using FedAsync (alpha={alpha_async}).")
+        except Exception as e:
+            print(f"Error during FedAsync aggregation for node {address}: {e}")
+            return '0', 500 # Indicate server error
+
+    else:
+        print(f"Error: Unknown aggregation method '{args.aggregate}'")
+        return '0', 500 # Internal server error
+
+    return '1' # Indicate success
 
 # 返回或上传全局模型
 @app.route('/newGlobalModel', methods=['GET', 'POST'])
