@@ -47,12 +47,8 @@ esac
 
 echo "Running experiment with Method: $AGGREGATE_METHOD, Nodes: $NUM_NODES, Epochs: $EPOCHS..."
 
-# --- Create Log Directory ---
-LOG_DIR="logs_method_${AGGREGATE_METHOD}_node_${NUM_NODES}_epoch_${EPOCHS}"
-echo "Creating log directory: $LOG_DIR"
-mkdir -p "$LOG_DIR"
-# Clean up previous logs within this specific directory if they exist
-# rm -f "$LOG_DIR"/*.log # Optional: uncomment to clean logs from previous runs with same params
+# --- Ensure Logs Directory Exists ---
+mkdir -p logs # Ensure the main logs directory exists
 
 # --- Initialize Results File ---
 if [ ! -f "$RESULTS_FILE" ]; then
@@ -62,15 +58,18 @@ if [ ! -f "$RESULTS_FILE" ]; then
 fi
 
 # --- Start Server ---
+# Ensure the main logs directory exists
+mkdir -p logs
 echo "Starting server on port $SERVER_PORT with aggregation method '$AGGREGATE_METHOD'..."
-$PYTHON_CMD ./main_server.py --port $SERVER_PORT --aggregate $AGGREGATE_METHOD > "$LOG_DIR/server.log" 2>&1 &
+# Redirect server output to the main logs directory, overwriting previous log
+$PYTHON_CMD ./main_server.py --port $SERVER_PORT --aggregate $AGGREGATE_METHOD > "logs/server.log" 2>&1 &
 SERVER_PID=$!
-echo "Server started with PID $SERVER_PID. Waiting a few seconds for it to initialize..."
+echo "Server started with PID $SERVER_PID. Log file: logs/server.log. Waiting a few seconds for it to initialize..."
 sleep 5 # Give server time to start
 
 # --- Check if server started successfully (basic check) ---
 if ! ps -p $SERVER_PID > /dev/null; then
-    echo "Server failed to start. Check $LOG_DIR/server.log for details."
+    echo "Server failed to start. Check logs/server.log for details."
     # Record failure in results file
     echo "$AGGREGATE_METHOD,$NUM_NODES,$EPOCHS,ServerError" >> "$RESULTS_FILE"
     exit 1
@@ -118,8 +117,11 @@ do
         --start_test_index=$START_TEST_INDEX \
         --end_test_index=$END_TEST_INDEX"
 
-    # Run node in background and log output to the specific directory
-    $NODE_CMD > "$LOG_DIR/node_${USER_ID}.log" 2>&1 &
+    # Define node log file path directly in the logs directory
+    NODE_LOG_FILE="logs/node_${USER_ID}_${AGGREGATE_METHOD}_${NUM_NODES}_${EPOCHS}.log"
+    echo "Node log file: $NODE_LOG_FILE"
+    # Run node in background and log output to the main logs directory
+    $NODE_CMD > "$NODE_LOG_FILE" 2>&1 &
     NODE_PIDS+=($!) # Store PID
 done
 
@@ -131,7 +133,8 @@ for pid in "${NODE_PIDS[@]}"; do
     # Capture exit status of nodes; if any failed, record it
     if [ $? -ne 0 ]; then
         EXIT_STATUS=1
-        echo "Node with PID $pid failed. Check $LOG_DIR/node_*.log files."
+        # Update error message to reflect new log location/naming
+        echo "Node with PID $pid failed. Check logs/node_${USER_ID}_${AGGREGATE_METHOD}_${NUM_NODES}_${EPOCHS}.log for details."
     fi
 done
 
@@ -166,7 +169,7 @@ if [ -n "$ACCURACY" ]; then
     echo "$AGGREGATE_METHOD,$NUM_NODES,$EPOCHS,$ACCURACY" >> "$RESULTS_FILE"
     echo "Result recorded in $RESULTS_FILE"
 else
-    echo "Could not extract accuracy from evaluation output. Check $LOG_DIR logs and evaluation script."
+    echo "Could not extract accuracy from evaluation output. Check logs/node_* logs and evaluation script."
     # Record failure or placeholder
     echo "$AGGREGATE_METHOD,$NUM_NODES,$EPOCHS,EvalError" >> "$RESULTS_FILE"
 fi

@@ -23,5 +23,4 @@ env/
 
 # Experiment results and logs
 experiment_results.csv
-logs_*/
-server.log
+logs/

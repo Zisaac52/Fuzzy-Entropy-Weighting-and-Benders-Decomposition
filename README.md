@@ -19,7 +19,7 @@
 
 1.  **克隆仓库** (如果尚未完成):
     ```bash
-    git clone <repository-url>
+    git clone https://gitee.com/zclisaac/afl-fuzzy-entropy.git
     cd BAFL-Entropy
     ```
 
