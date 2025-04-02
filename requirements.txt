@@ -1,0 +1,7 @@
+requests
+torch
+torchvision
+flask
+flask_socketio
+numpy
+matplotlib
