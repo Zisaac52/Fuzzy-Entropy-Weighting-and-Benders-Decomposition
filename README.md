@@ -55,17 +55,17 @@
 *   `--node <num_nodes>`: 参与联邦学习的节点数量 (默认为 4)。
 *   `--epoch <num_epochs>`: 每个节点在每一轮聚合前本地训练的轮数 (默认为 1)。
 *   `--method <aggregate_method>`: 使用的聚合方法。可选值:
-    *   `bafl` (默认): 原始论文中的熵加权异步聚合方法。
+    *   `fuzzy` (默认): 模糊熵熵权法。
     *   `iewm`: 信息熵加权方法。
     *   `fedasync`: 简单的异步联邦平均。
 
 **示例:**
 
-*   运行一个使用 8 个节点、每个节点训练 5 轮、采用 BAFL 方法的实验：
+*   运行一个使用 8 个节点、每个节点训练 5 轮、采用 Fuzzy 方法的实验：
     ```bash
-    ./run_experiment.sh --node 8 --epoch 5 --method bafl
+    ./run_experiment.sh --node 8 --epoch 5 --method fuzzy
     ```
-*   运行一个使用默认配置（4 个节点，1 轮，BAFL 方法）的实验：
+*   运行一个使用默认配置（4 个节点，1 轮，Fuzzy 方法）的实验：
     ```bash
     ./run_experiment.sh
     ```
@@ -77,7 +77,7 @@
 
 ### 运行批量实验 (针对 8 个节点)
 
-使用 `run_all_experiments_node8.sh` 脚本可以方便地为 8 个节点运行一系列实验，遍历 1 到 10 个训练轮数以及所有支持的聚合方法 (`bafl`, `iewm`, `fedasync`)。
+使用 `run_all_experiments_node8.sh` 脚本可以方便地为 8 个节点运行一系列实验，遍历 1 到 10 个训练轮数以及所有支持的聚合方法 (`fuzzy`, `iewm`, `fedasync`)。
 
 **用法:**
 
@@ -94,7 +94,7 @@
     *   CIFAR-10 (目前仅支持 IID 数据划分)
     *   *注意*: 数据集在 `main_node.py` 中配置，目前脚本默认使用 MNIST。
 *   **聚合方法**:
-    *   `bafl`
+    *   `fuzzy`
     *   `iewm`
     *   `fedasync`
 *   **数据划分**:

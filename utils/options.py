@@ -29,8 +29,8 @@ def args_server_parser():
     parser.add_argument('--num_channels', type=int, default=1, help="number of channels of imges")
     parser.add_argument('--eth_rpc', type=str, default='http://localhost:8545', help='')
     parser.add_argument('--port', type=int, default=8000, help='')
-    parser.add_argument('--aggregate', type=str, default='bafl', choices=['fedasync', 'bafl', 'iewm'],
-                        help='Aggregation method: fedasync (simple async average), bafl (fuzzy entropy), or iewm (information entropy)')
+    parser.add_argument('--aggregate', type=str, default='fuzzy', choices=['fedasync', 'fuzzy', 'iewm'],
+                        help='Aggregation method: fedasync (simple async average), fuzzy (fuzzy entropy), or iewm (information entropy)')
     args = parser.parse_args()
     return args
 

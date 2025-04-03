@@ -127,9 +127,9 @@ def newLocalModel(address):
     globalStateDict = net_glob.state_dict()  # 获取当前全局模型的状态字典
     uid = globalState['uid'][address]  # 获取节点的 UID
 
-    if args.aggregate == 'bafl':
-        # --- Existing BAFL Logic ---
-        globalState['s'][3][uid] = getDis(globalStateDict, localStateDict) # Update distance for BAFL
+    if args.aggregate == 'fuzzy':
+        # --- Existing Fuzzy Logic ---
+        globalState['s'][3][uid] = getDis(globalStateDict, localStateDict) # Update distance for Fuzzy
 
         res = merge(uid, address, { # merge uses getAlpha which uses entropy weights
             "local_state_dict": localStateDict,
@@ -145,10 +145,10 @@ def newLocalModel(address):
             globalState['t'][uid] = time.time()
             globalState['s'][1][uid] = float(res['score'])
             net_glob.load_state_dict(hexToStateDict(res['model_state_hex'])) # Update global model
-            print(f"Model from {address} successfully merged into global model using BAFL.")
+            print(f"Model from {address} successfully merged into global model using Fuzzy.")
         else:
-             print(f"BAFL merge returned None for node {address}. Global model not updated.")
-             print(f"BAFL merge returned None for node {address}. Global model not updated.")
+             print(f"Fuzzy merge returned None for node {address}. Global model not updated.")
+             print(f"Fuzzy merge returned None for node {address}. Global model not updated.")
              # Decide if we should still update the timestamp
              # globalState['t'][uid] = time.time() # Update time even if merge fails?
 

@@ -3,8 +3,8 @@
 # --- Default Configuration ---
 DEFAULT_NUM_NODES=4
 DEFAULT_EPOCHS=1
-DEFAULT_AGGREGATE_METHOD="bafl" # Default method
-SERVER_PORT=8000
+DEFAULT_AGGREGATE_METHOD="fuzzy" # Default method
+SERVER_PORT=8080
 # AGGREGATE_METHOD will be set by args
 DATASET="mnist"
 LEARNING_RATE=0.01
@@ -40,8 +40,8 @@ if ! [[ "$NUM_NODES" =~ ^[0-9]+$ ]] || ! [[ "$EPOCHS" =~ ^[0-9]+$ ]]; then
 fi
 # Validate method
 case "$AGGREGATE_METHOD" in
-    bafl|iewm|fedasync) ;; # Allowed methods
-    *) echo "Error: Invalid --method specified. Use 'bafl', 'iewm', or 'fedasync'." >&2 ; exit 1 ;;
+    fuzzy|iewm|fedasync) ;; # Allowed methods
+    *) echo "Error: Invalid --method specified. Use 'fuzzy', 'iewm', or 'fedasync'." >&2 ; exit 1 ;;
 esac
 
 
