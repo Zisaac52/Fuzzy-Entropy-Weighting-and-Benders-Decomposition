@@ -37,7 +37,7 @@ def fuzzy_membership(d, r, n=2):
     return np.exp(-(d ** n) / r)
 
 
-def fuzzy_entropy(data, m=2, r=0.2):
+def fuzzy_entropy(data, m=5, r=0.2):
     """
     计算模糊熵 (BAFL specific)
     替代原来的信息熵，但保持熵的基本性质：
@@ -90,7 +90,7 @@ def fuzzy_entropy(data, m=2, r=0.2):
         return 0
 
 
-def getWk(N_D, s, s_i):
+def getWk(N_D, s, s_i, fuzzy_m=5): # Add fuzzy_m parameter
     """
     计算权重 (BAFL specific - uses fuzzy_entropy)
     保持原有的熵权法计算逻辑：
@@ -100,36 +100,47 @@ def getWk(N_D, s, s_i):
     """
     try:
         if N_D <= 1:  # 至少需要2个样本
-            return 1.0 / len(s)
+            # Return equal weight if only one sample or less
+            return 1.0 / len(s) if len(s) > 0 else 1.0 # Avoid division by zero if s is empty
 
         # 计算当前指标的熵值
-        entropy = fuzzy_entropy(s_i)
+        # Pass fuzzy_m to fuzzy_entropy
+        entropy = fuzzy_entropy(s_i, m=fuzzy_m)
 
         # 计算所有指标的熵值之和
         sum_entropy = 0
+        valid_metrics_count = 0 # Count metrics that are not empty
         for i in range(len(s)):
-            if s[i]:
-                sum_entropy += fuzzy_entropy(s[i])
+            if s[i]: # Check if the metric list is not empty
+                # Pass fuzzy_m to fuzzy_entropy
+                sum_entropy += fuzzy_entropy(s[i], m=fuzzy_m)
+                valid_metrics_count += 1
+
+        if valid_metrics_count == 0: # Handle case where all metric lists in s are empty
+             return 1.0 / len(s) if len(s) > 0 else 1.0 # Return equal weight or 1.0 if s is empty
 
         # 计算差异系数 (1 - 熵值)
         diff_coefficient = 1 - entropy
 
-        # 所有指标的差异系数之和
-        sum_diff_coefficient = len(s) - sum_entropy
+        # 所有指标的差异系数之和 (use valid_metrics_count)
+        sum_diff_coefficient = valid_metrics_count - sum_entropy
 
         if sum_diff_coefficient == 0:
-            return 1.0 / len(s)
+             # Return equal weight among valid metrics
+            return 1.0 / valid_metrics_count if valid_metrics_count > 0 else 1.0
 
         # 计算权重 (保持原有的权重计算公式)
         weight = diff_coefficient / sum_diff_coefficient
 
-        return weight
+        # Ensure weight is non-negative
+        return max(0.0, weight)
     except Exception as e:
         print(f"Error in getWk: {str(e)}")
-        return 1.0 / len(s)
+        # Return equal weight on error
+        return 1.0 / len(s) if len(s) > 0 else 1.0
 
 
-def getTauI(i, N_D, s):
+def getTauI(i, N_D, s, fuzzy_m=2): # Add fuzzy_m parameter
     """
     计算综合得分 (BAFL specific - uses getWk with fuzzy_entropy)
     保持原有的加权求和逻辑
@@ -140,19 +151,31 @@ def getTauI(i, N_D, s):
 
         # 计算加权和
         for k in range(len(s)):
+            # Check if s[k] is valid and has element at index i
             if s[k] and len(s[k]) > i:
-                weight = getWk(N_D, s, s[k]) # BAFL's getWk
-                sum_score += weight * s[k][i]
-                sum_weight += weight
+                # Pass fuzzy_m to getWk
+                weight = getWk(N_D, s, s[k], fuzzy_m=fuzzy_m) # BAFL's getWk
+                # Ensure s[k][i] is numeric before multiplication
+                try:
+                    value = float(s[k][i])
+                    sum_score += weight * value
+                    sum_weight += weight
+                except (ValueError, TypeError):
+                    print(f"Warning in getTauI: Non-numeric value encountered at s[{k}][{i}]: {s[k][i]}. Skipping.")
+                    continue # Skip this metric for the current node
 
         if sum_weight == 0:
+            print("Warning in getTauI: Sum of weights is zero. Returning default score 0.5.")
             return 0.5
 
         # 返回归一化后的得分
-        return sum_score / sum_weight
+        # Ensure score is within a reasonable range if needed, e.g., [0, 1] if s[k][i] are normalized
+        calculated_score = sum_score / sum_weight
+        # return max(0.0, min(1.0, calculated_score)) # Optional: Clamp score if needed
+        return calculated_score
     except Exception as e:
         print(f"Error in getTauI: {str(e)}")
-        return 0.5
+        return 0.5 # Return default score on error
 
 
 # 根据牛顿冷却法取得当前模型的权重 (Used by BAFL and IEWM)
@@ -186,7 +209,7 @@ def normalization(s):
         return 0
 
 
-def getAlpha(kexi, t, t0, theta, R0, i, N_D, s):
+def getAlpha(kexi, t, t0, theta, R0, i, N_D, s, fuzzy_m=2): # Add fuzzy_m parameter
     """
     计算最终权重 (BAFL specific - uses BAFL's normalization and getTauI)
     保持原有的时间衰减和熵权重组合逻辑
@@ -204,7 +227,8 @@ def getAlpha(kexi, t, t0, theta, R0, i, N_D, s):
         time_factor = getR(t, t0, theta, R0)
 
         # 计算熵权重
-        entropy_weight = getTauI(i, N_D, s_norm) # BAFL's getTauI
+        # Pass fuzzy_m to getTauI
+        entropy_weight = getTauI(i, N_D, s_norm, fuzzy_m=fuzzy_m) # BAFL's getTauI
 
         # 计算最终权重 (保持原有公式)
         alpha = kexi * time_factor * entropy_weight

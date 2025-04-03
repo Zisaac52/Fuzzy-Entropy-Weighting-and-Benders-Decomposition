@@ -58,14 +58,15 @@
     *   `fuzzy` (默认): 模糊熵熵权法。
     *   `iewm`: 信息熵加权方法。
     *   `fedasync`: 简单的异步联邦平均。
+*   `--fuzzy_m <value>`: 当 `--method` 为 `fuzzy` 时，指定模糊熵计算中的 `m` 参数 (默认为 2，如果未通过命令行指定)。
 
 **示例:**
 
-*   运行一个使用 8 个节点、每个节点训练 5 轮、采用 Fuzzy 方法的实验：
+*   运行一个使用 8 个节点、每个节点训练 5 轮、采用 Fuzzy 方法、`fuzzy_m` 设为 3 的实验：
     ```bash
-    ./run_experiment.sh --node 8 --epoch 5 --method fuzzy
+    ./run_experiment.sh --node 8 --epoch 5 --method fuzzy --fuzzy_m 3
     ```
-*   运行一个使用默认配置（4 个节点，1 轮，Fuzzy 方法）的实验：
+*   运行一个使用默认配置（4 个节点，1 轮，Fuzzy 方法，默认 `fuzzy_m`）的实验：
     ```bash
     ./run_experiment.sh
     ```
@@ -77,7 +78,7 @@
 
 ### 运行批量实验 (针对 8 个节点)
 
-使用 `run_all_experiments_node8.sh` 脚本可以方便地为 8 个节点运行一系列实验，遍历 1 到 10 个训练轮数以及所有支持的聚合方法 (`fuzzy`, `iewm`, `fedasync`)。
+使用 `run_all_experiments_node8.sh` 脚本可以方便地为 8 个节点运行一系列实验，遍历 1 到 10 个训练轮数、所有支持的聚合方法 (`fuzzy`, `iewm`, `fedasync`)，以及在 `fuzzy` 方法下预定义的 `fuzzy_m` 值 (在脚本内部的 `FUZZY_M_VALUES` 数组中指定)。
 
 **用法:**
 

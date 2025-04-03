@@ -4,6 +4,7 @@
 DEFAULT_NUM_NODES=4
 DEFAULT_EPOCHS=1
 DEFAULT_AGGREGATE_METHOD="fuzzy" # Default method
+DEFAULT_FUZZY_M=2 # Default fuzzy_m value
 SERVER_PORT=8080
 # AGGREGATE_METHOD will be set by args
 DATASET="mnist"
@@ -17,9 +18,11 @@ RESULTS_FILE="experiment_results.csv"
 NUM_NODES=$DEFAULT_NUM_NODES
 EPOCHS=$DEFAULT_EPOCHS
 AGGREGATE_METHOD=$DEFAULT_AGGREGATE_METHOD
+FUZZY_M=$DEFAULT_FUZZY_M # Initialize fuzzy_m
 
 # Use getopt to parse named arguments
-TEMP=$(getopt -o '' --long node:,epoch:,method: -n 'run_experiment.sh' -- "$@")
+# Add --fuzzy_m to getopt
+TEMP=$(getopt -o '' --long node:,epoch:,method:,fuzzy_m: -n 'run_experiment.sh' -- "$@")
 if [ $? != 0 ] ; then echo "Argument parsing error. Terminating..." >&2 ; exit 1 ; fi
 eval set -- "$TEMP" # Correctly quote the arguments for eval
 
@@ -28,6 +31,7 @@ while true; do
     --node ) NUM_NODES="$2"; shift 2 ;;
     --epoch ) EPOCHS="$2"; shift 2 ;;
     --method ) AGGREGATE_METHOD="$2"; shift 2 ;;
+    --fuzzy_m ) FUZZY_M="$2"; shift 2 ;;
     -- ) shift; break ;;
     * ) echo "Internal error!" ; exit 1 ;; # Should not happen with getopt
   esac
@@ -43,9 +47,20 @@ case "$AGGREGATE_METHOD" in
     fuzzy|iewm|fedasync) ;; # Allowed methods
     *) echo "Error: Invalid --method specified. Use 'fuzzy', 'iewm', or 'fedasync'." >&2 ; exit 1 ;;
 esac
+# Validate fuzzy_m if method is fuzzy
+if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
+    if ! [[ "$FUZZY_M" =~ ^[0-9]+$ ]] || [ "$FUZZY_M" -le 0 ]; then
+        echo "Error: --fuzzy_m must be a positive integer when method is 'fuzzy'." >&2
+        exit 1
+    fi
+fi
 
-
-echo "Running experiment with Method: $AGGREGATE_METHOD, Nodes: $NUM_NODES, Epochs: $EPOCHS..."
+# Update echo statement to include fuzzy_m if applicable
+if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
+    echo "Running experiment with Method: $AGGREGATE_METHOD, FuzzyM: $FUZZY_M, Nodes: $NUM_NODES, Epochs: $EPOCHS..."
+else
+    echo "Running experiment with Method: $AGGREGATE_METHOD, Nodes: $NUM_NODES, Epochs: $EPOCHS..."
+fi
 
 # --- Ensure Logs Directory Exists ---
 mkdir -p logs # Ensure the main logs directory exists
@@ -53,16 +68,23 @@ mkdir -p logs # Ensure the main logs directory exists
 # --- Initialize Results File ---
 if [ ! -f "$RESULTS_FILE" ]; then
     echo "Initializing results file: $RESULTS_FILE"
-    # Add Method column
-    echo "Method,Nodes,Epochs,Accuracy" > "$RESULTS_FILE"
+    # Add Method and FuzzyM columns
+    echo "Method,FuzzyM,Nodes,Epochs,Accuracy" > "$RESULTS_FILE"
 fi
 
 # --- Start Server ---
 # Ensure the main logs directory exists
 mkdir -p logs
-echo "Starting server on port $SERVER_PORT with aggregation method '$AGGREGATE_METHOD'..."
+# Construct server command, adding fuzzy_m if method is fuzzy
+SERVER_CMD="$PYTHON_CMD ./main_server.py --port $SERVER_PORT --aggregate $AGGREGATE_METHOD"
+if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
+    SERVER_CMD="$SERVER_CMD --fuzzy_m $FUZZY_M"
+    echo "Starting server on port $SERVER_PORT with aggregation method '$AGGREGATE_METHOD' and fuzzy_m '$FUZZY_M'..."
+else
+    echo "Starting server on port $SERVER_PORT with aggregation method '$AGGREGATE_METHOD'..."
+fi
 # Redirect server output to the main logs directory, overwriting previous log
-$PYTHON_CMD ./main_server.py --port $SERVER_PORT --aggregate $AGGREGATE_METHOD > "logs/server.log" 2>&1 &
+$SERVER_CMD > "logs/server.log" 2>&1 &
 SERVER_PID=$!
 echo "Server started with PID $SERVER_PID. Log file: logs/server.log. Waiting a few seconds for it to initialize..."
 sleep 5 # Give server time to start
@@ -70,8 +92,10 @@ sleep 5 # Give server time to start
 # --- Check if server started successfully (basic check) ---
 if ! ps -p $SERVER_PID > /dev/null; then
     echo "Server failed to start. Check logs/server.log for details."
-    # Record failure in results file
-    echo "$AGGREGATE_METHOD,$NUM_NODES,$EPOCHS,ServerError" >> "$RESULTS_FILE"
+    # Record failure in results file, include FuzzyM
+    FUZZY_M_VAL="N/A"
+    if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then FUZZY_M_VAL=$FUZZY_M; fi
+    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,ServerError" >> "$RESULTS_FILE"
     exit 1
 fi
 echo "Server seems to be running."
@@ -117,8 +141,12 @@ do
         --start_test_index=$START_TEST_INDEX \
         --end_test_index=$END_TEST_INDEX"
 
-    # Define node log file path directly in the logs directory
-    NODE_LOG_FILE="logs/node_${USER_ID}_${AGGREGATE_METHOD}_${NUM_NODES}_${EPOCHS}.log"
+    # Define node log file path, include fuzzy_m if method is fuzzy
+    if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
+        NODE_LOG_FILE="logs/node_${USER_ID}_${AGGREGATE_METHOD}_m${FUZZY_M}_n${NUM_NODES}_e${EPOCHS}.log"
+    else
+        NODE_LOG_FILE="logs/node_${USER_ID}_${AGGREGATE_METHOD}_n${NUM_NODES}_e${EPOCHS}.log"
+    fi
     echo "Node log file: $NODE_LOG_FILE"
     # Run node in background and log output to the main logs directory
     $NODE_CMD > "$NODE_LOG_FILE" 2>&1 &
@@ -134,14 +162,20 @@ for pid in "${NODE_PIDS[@]}"; do
     if [ $? -ne 0 ]; then
         EXIT_STATUS=1
         # Update error message to reflect new log location/naming
-        echo "Node with PID $pid failed. Check logs/node_${USER_ID}_${AGGREGATE_METHOD}_${NUM_NODES}_${EPOCHS}.log for details."
+        if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
+            echo "Node with PID $pid failed. Check logs/node_${USER_ID}_${AGGREGATE_METHOD}_m${FUZZY_M}_n${NUM_NODES}_e${EPOCHS}.log for details."
+        else
+             echo "Node with PID $pid failed. Check logs/node_${USER_ID}_${AGGREGATE_METHOD}_n${NUM_NODES}_e${EPOCHS}.log for details."
+        fi
     fi
 done
 
 if [ $EXIT_STATUS -ne 0 ]; then
     echo "One or more nodes failed to complete successfully."
-    # Record failure
-    echo "$AGGREGATE_METHOD,$NUM_NODES,$EPOCHS,NodeError" >> "$RESULTS_FILE"
+    # Record failure, include FuzzyM
+    FUZZY_M_VAL="N/A"
+    if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then FUZZY_M_VAL=$FUZZY_M; fi
+    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,NodeError" >> "$RESULTS_FILE"
     # Stop server and exit
     echo "Stopping server (PID $SERVER_PID)..."
     kill $SERVER_PID
@@ -165,13 +199,17 @@ ACCURACY=$(echo "$EVAL_OUTPUT" | grep -oP 'Global Model Test: Accuracy: \K[0-9]+
 
 if [ -n "$ACCURACY" ]; then
     echo "Extracted Accuracy: $ACCURACY%"
-    # Append result to CSV file including the method
-    echo "$AGGREGATE_METHOD,$NUM_NODES,$EPOCHS,$ACCURACY" >> "$RESULTS_FILE"
+    # Append result to CSV file including the method and FuzzyM
+    FUZZY_M_VAL="N/A"
+    if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then FUZZY_M_VAL=$FUZZY_M; fi
+    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,$ACCURACY" >> "$RESULTS_FILE"
     echo "Result recorded in $RESULTS_FILE"
 else
     echo "Could not extract accuracy from evaluation output. Check logs/node_* logs and evaluation script."
-    # Record failure or placeholder
-    echo "$AGGREGATE_METHOD,$NUM_NODES,$EPOCHS,EvalError" >> "$RESULTS_FILE"
+    # Record failure or placeholder, include FuzzyM
+    FUZZY_M_VAL="N/A"
+    if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then FUZZY_M_VAL=$FUZZY_M; fi
+    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,EvalError" >> "$RESULTS_FILE"
 fi
 
 
@@ -186,4 +224,9 @@ if ps -p $SERVER_PID > /dev/null; then
 fi
 echo "Server stopped."
 
-echo "Experiment finished for Method=$AGGREGATE_METHOD, Node=$NUM_NODES, Epoch=$EPOCHS."
+# Update final message
+if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
+    echo "Experiment finished for Method=$AGGREGATE_METHOD, FuzzyM=$FUZZY_M, Node=$NUM_NODES, Epoch=$EPOCHS."
+else
+    echo "Experiment finished for Method=$AGGREGATE_METHOD, Node=$NUM_NODES, Epoch=$EPOCHS."
+fi

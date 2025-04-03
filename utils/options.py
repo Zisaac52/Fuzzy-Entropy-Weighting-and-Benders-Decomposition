@@ -31,6 +31,7 @@ def args_server_parser():
     parser.add_argument('--port', type=int, default=8000, help='')
     parser.add_argument('--aggregate', type=str, default='fuzzy', choices=['fedasync', 'fuzzy', 'iewm'],
                         help='Aggregation method: fedasync (simple async average), fuzzy (fuzzy entropy), or iewm (information entropy)')
+    parser.add_argument('--fuzzy_m', type=int, default=2, help='Parameter m for fuzzy entropy calculation') # <--- 添加这一行
     args = parser.parse_args()
     return args
 

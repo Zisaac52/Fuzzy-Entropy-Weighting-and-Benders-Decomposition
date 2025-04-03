@@ -70,7 +70,8 @@ globalState = {
 # 模型聚合的结果
 weights = []
 
-def merge(uid, address, data):
+# Modify merge function signature to accept fuzzy_m
+def merge(uid, address, data, fuzzy_m=2): # Add fuzzy_m parameter with default
     try:
         print(f"\nMerging local model from node: {address}")
         print(f"Current state - UID: {uid}")
@@ -82,7 +83,8 @@ def merge(uid, address, data):
             print("Missing required data fields")
             return None
             
-        alpha = getAlpha(1, int(time.time()), data['t0'], 0.003, 1, data['uid'], data['n_d'], data['s'])
+        # Pass fuzzy_m to getAlpha
+        alpha = getAlpha(1, int(time.time()), data['t0'], 0.003, 1, data['uid'], data['n_d'], data['s'], fuzzy_m=fuzzy_m) # Pass fuzzy_m here
         print(f"Calculated alpha: {alpha}")
         
         if alpha == 0:
@@ -99,7 +101,8 @@ def merge(uid, address, data):
                 
             stateDictHex = stateDictToHex(globStateDict)
             s = normalization(data['s'])
-            score = getTauI(uid, data['n_d'], s)
+            # Pass fuzzy_m to getTauI (which will pass it to getWk)
+            score = getTauI(uid, data['n_d'], s, fuzzy_m=fuzzy_m) # Pass fuzzy_m here
             
             print(f"Merge completed. Score: {score}")
             
@@ -131,6 +134,7 @@ def newLocalModel(address):
         # --- Existing Fuzzy Logic ---
         globalState['s'][3][uid] = getDis(globalStateDict, localStateDict) # Update distance for Fuzzy
 
+        # Pass args.fuzzy_m to merge function
         res = merge(uid, address, { # merge uses getAlpha which uses entropy weights
             "local_state_dict": localStateDict,
             "global_state_dict": globalStateDict,
@@ -138,11 +142,12 @@ def newLocalModel(address):
             "n_d": globalState['n_d'],
             "uid": uid,
             "t0": globalState['t'][uid]
-        })
+        }, fuzzy_m=args.fuzzy_m) # Pass args.fuzzy_m here
 
         if res:
             # Update global state (time, score) specific to BAFL
             globalState['t'][uid] = time.time()
+            # Score is now calculated within merge using fuzzy_m, so use the returned score
             globalState['s'][1][uid] = float(res['score'])
             net_glob.load_state_dict(hexToStateDict(res['model_state_hex'])) # Update global model
             print(f"Model from {address} successfully merged into global model using Fuzzy.")
