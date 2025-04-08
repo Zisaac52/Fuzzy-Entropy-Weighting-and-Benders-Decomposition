@@ -1,23 +1,6 @@
-# BAFL-Entropy: Blockchain-Based Asynchronous Federated Learning with Entropy Weighting
-
-本项目实现了基于区块链的异步联邦学习框架（BAFL），并结合了信息熵加权方法（IEWM）以及传统的 FedAsync 聚合策略。代码主要参考了以下论文：
-
-```
-@article{REPO-283,
-    author = "Feng, Lei and Zhao, Yiqi and Guo, Shaoyong and Qiu, Xuesong and Li, Wenjing and Yu, Peng",
-    journal = "IEEE Transactions on Computers",
-    number = "5",
-    pages = "1092--1103",
-    publisher = "IEEE",
-    title = "{BAFL: A Blockchain-Based Asynchronous Federated Learning Framework}",
-    volume = "71",
-    year = "2021"
-}
-```
-
 ## 环境设置
 
-1.  **克隆仓库** (如果尚未完成):
+1.  **克隆仓库** :
     ```bash
     git clone https://gitee.com/zclisaac/afl-fuzzy-entropy.git
     cd BAFL-Entropy

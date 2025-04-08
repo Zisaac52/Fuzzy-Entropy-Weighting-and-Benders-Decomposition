@@ -33,16 +33,17 @@ if [[ "$METHOD" != "fuzzy" && "$METHOD" != "iewm" && "$METHOD" != "fedasync" ]];
     exit 1
 fi
 
-# --- Setup Log Directory ---
-LOG_DIR="logs_gpu${GPU_ID}_method_${METHOD}_node_${NUM_NODES}_epoch_${EPOCHS}"
+# --- Setup Log Directory and Filename Suffix ---
+BASE_LOG_DIR="logs" # Unified log directory
+mkdir -p "$BASE_LOG_DIR"
+RUN_SUFFIX="gpu${GPU_ID}_method_${METHOD}_node_${NUM_NODES}_epoch_${EPOCHS}"
 if [ "$METHOD" == "fuzzy" ]; then
-    LOG_DIR="${LOG_DIR}_fuzzym${FUZZY_M}"
+    RUN_SUFFIX="${RUN_SUFFIX}_fuzzym${FUZZY_M}"
 fi
-mkdir -p "$LOG_DIR"
-echo "Logs will be saved in: $LOG_DIR"
+echo "Logs will be saved in: $BASE_LOG_DIR with suffix: $RUN_SUFFIX"
 
 # --- Setup Results File ---
-RESULTS_FILE="gpu_experiment_results.csv"
+RESULTS_FILE="gpu_experiment_results.csv" # Keep GPU results separate for now, or change if needed
 echo "GPU experiment results will be appended to: $RESULTS_FILE"
 
 # --- Server Port ---
@@ -59,13 +60,15 @@ cleanup() {
 trap cleanup EXIT SIGINT SIGTERM
 
 # --- Start Server ---
-echo "Starting server on port $SERVER_PORT using GPU $GPU_ID..."
+# echo "Starting server on port $SERVER_PORT using GPU $GPU_ID..." # Removed redundant echo, the next one is clearer
+SERVER_LOG_FILE="$BASE_LOG_DIR/server_${RUN_SUFFIX}.log"
+echo "Starting server, logging to $SERVER_LOG_FILE"
 python main_server.py \
     --port $SERVER_PORT \
     --aggregate $METHOD \
     --fuzzy_m $FUZZY_M \
     --gpu $GPU_ID \
-    > "$LOG_DIR/server.log" 2>&1 &
+    > "$SERVER_LOG_FILE" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 sleep 5 # Give server time to start
@@ -85,7 +88,10 @@ do
     END_TEST=$(((i + 1) * TEST_SLICE))
     NODE_ADDRESS="node_$i" # Simple address for identification
 
-    echo "Starting Node $i (Address: $NODE_ADDRESS) on GPU $GPU_ID..."
+    # echo "Starting Node $i (Address: $NODE_ADDRESS) on GPU $GPU_ID..." # Redundant echo
+    NODE_LOG_FILE="$BASE_LOG_DIR/node_${i}_${RUN_SUFFIX}.log"
+    echo "Starting Node $i, logging to $NODE_LOG_FILE"
+    # The actual command to run the node and redirect output
     python main_node.py \
         --epoch $EPOCHS \
         --gpu $GPU_ID \
@@ -99,7 +105,7 @@ do
         --start_test_index $START_TEST \
         --end_test_index $END_TEST \
         --user_id $i \
-        > "$LOG_DIR/node_$i.log" 2>&1 &
+        > "$NODE_LOG_FILE" 2>&1 &
     NODE_PIDS+=($!) # Store node PIDs if needed later, though trap handles cleanup
     sleep 1 # Stagger node starts slightly
 done

@@ -167,11 +167,11 @@ do
         --start_test_index=$START_TEST_INDEX \
         --end_test_index=$END_TEST_INDEX"
 
-    # Define node log file path, include fuzzy_m if method is fuzzy
+    # Define node log file path, include cpu identifier and fuzzy_m if method is fuzzy
     if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
-        NODE_LOG_FILE="logs/node_${USER_ID}_${AGGREGATE_METHOD}_m${FUZZY_M}_n${NUM_NODES}_e${EPOCHS}.log"
+        NODE_LOG_FILE="logs/node_${USER_ID}_cpu_${AGGREGATE_METHOD}_m${FUZZY_M}_n${NUM_NODES}_e${EPOCHS}.log"
     else
-        NODE_LOG_FILE="logs/node_${USER_ID}_${AGGREGATE_METHOD}_n${NUM_NODES}_e${EPOCHS}.log"
+        NODE_LOG_FILE="logs/node_${USER_ID}_cpu_${AGGREGATE_METHOD}_n${NUM_NODES}_e${EPOCHS}.log"
     fi
     echo "Node log file: $NODE_LOG_FILE"
     # Run node in background and log output to the main logs directory
@@ -187,11 +187,11 @@ for pid in "${NODE_PIDS[@]}"; do
     # Capture exit status of nodes; if any failed, record it
     if [ $? -ne 0 ]; then
         EXIT_STATUS=1
-        # Update error message to reflect new log location/naming
+        # Update error message to reflect new log location/naming (including cpu identifier)
         if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
-            echo "Node with PID $pid failed. Check logs/node_${USER_ID}_${AGGREGATE_METHOD}_m${FUZZY_M}_n${NUM_NODES}_e${EPOCHS}.log for details."
+            echo "Node with PID $pid failed. Check logs/node_${USER_ID}_cpu_${AGGREGATE_METHOD}_m${FUZZY_M}_n${NUM_NODES}_e${EPOCHS}.log for details."
         else
-             echo "Node with PID $pid failed. Check logs/node_${USER_ID}_${AGGREGATE_METHOD}_n${NUM_NODES}_e${EPOCHS}.log for details."
+             echo "Node with PID $pid failed. Check logs/node_${USER_ID}_cpu_${AGGREGATE_METHOD}_n${NUM_NODES}_e${EPOCHS}.log for details."
         fi
     fi
 done
