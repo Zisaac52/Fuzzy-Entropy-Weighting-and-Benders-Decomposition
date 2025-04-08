@@ -25,7 +25,7 @@ def register(address, dataSize):
 import base64
 import io
 import requests
-import torch
+import torch # Ensure torch is imported
 import copy # Import copy for deepcopy
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO
@@ -41,12 +41,22 @@ from utils.models import hexToStateDict, stateDictToHex
 # 解析服务器参数
 args = args_server_parser() # args is now available globally in this module
 
+# --- 设置服务器设备 ---
+if args.gpu != -1 and torch.cuda.is_available():
+    device = torch.device(f'cuda:{args.gpu}')
+    print(f"Server using GPU: {args.gpu}")
+else:
+    device = torch.device('cpu')
+    print("Server using CPU")
+# --- End 设置服务器设备 ---
+
 # 初始化全局模型
 def initNetGlob():
     if args.model == 'cnn':
         net_glob = CNN(num_classes=args.num_classes, num_channels=args.num_channels)
     else:
         exit('Error: unrecognized model')
+    net_glob.to(device) # <-- 将模型移动到指定设备
     return net_glob
 
 # 初始化 Flask 应用和 SocketIO
@@ -54,7 +64,7 @@ app = Flask(__name__)
 socketio = SocketIO(app)
 
 # 初始化全局模型
-net_glob = initNetGlob()
+net_glob = initNetGlob() # net_glob is now on the correct device
 
 # 全局状态，用于管理多个节点的状态
 globalState = {
@@ -124,20 +134,34 @@ def merge(uid, address, data, fuzzy_m=2): # Add fuzzy_m parameter with default
 @app.route('/newLocalModel/<address>', methods=['POST'])
 def newLocalModel(address):
     data = request.json
-    localStateDict = hexToStateDict(data['local_model_hex'])
-    
+    localStateDict_cpu = hexToStateDict(data['local_model_hex']) # Initially on CPU
+    if localStateDict_cpu is None:
+        print(f"Error decoding local model hex from {address}")
+        return '0', 500
+
+    # --- Move local state dict to server's device ---
+    localStateDict = {k: v.to(device) for k, v in localStateDict_cpu.items()}
+    # --- End Move local state dict ---
+
     global net_glob
-    globalStateDict = net_glob.state_dict()  # 获取当前全局模型的状态字典
+    globalStateDict = net_glob.state_dict()  # 获取当前全局模型的状态字典 (already on device)
     uid = globalState['uid'][address]  # 获取节点的 UID
 
-    if args.aggregate == 'fuzzy':
-        # --- Existing Fuzzy Logic ---
-        globalState['s'][3][uid] = getDis(globalStateDict, localStateDict) # Update distance for Fuzzy
+    # --- Ensure getDis is called with tensors on the same device ---
+    try:
+        distance = getDis(globalStateDict, localStateDict) # Both should be on 'device' now
+        globalState['s'][3][uid] = distance
+    except Exception as e:
+        print(f"Error calculating distance for node {address}: {e}")
+        # Handle error appropriately, maybe skip update or use default distance
+        globalState['s'][3][uid] = 0.0 # Example: set default distance
 
+    if args.aggregate == 'fuzzy':
+        # --- Existing Fuzzy Logic (now operating on 'device' tensors) ---
         # Pass args.fuzzy_m to merge function
         res = merge(uid, address, { # merge uses getAlpha which uses entropy weights
-            "local_state_dict": localStateDict,
-            "global_state_dict": globalStateDict,
+            "local_state_dict": localStateDict, # On device
+            "global_state_dict": globalStateDict, # On device
             "s": globalState['s'],
             "n_d": globalState['n_d'],
             "uid": uid,
@@ -149,17 +173,17 @@ def newLocalModel(address):
             globalState['t'][uid] = time.time()
             # Score is now calculated within merge using fuzzy_m, so use the returned score
             globalState['s'][1][uid] = float(res['score'])
-            net_glob.load_state_dict(hexToStateDict(res['model_state_hex'])) # Update global model
+            # net_glob is already on the correct device, load_state_dict handles it
+            net_glob.load_state_dict(res['cur_global_state_dict']) # Use the returned state dict directly
             print(f"Model from {address} successfully merged into global model using Fuzzy.")
         else:
-             print(f"Fuzzy merge returned None for node {address}. Global model not updated.")
              print(f"Fuzzy merge returned None for node {address}. Global model not updated.")
              # Decide if we should still update the timestamp
              # globalState['t'][uid] = time.time() # Update time even if merge fails?
 
     elif args.aggregate == 'iewm':
-        # --- Information Entropy Weight Method (IEWM) Logic ---
-        globalState['s'][3][uid] = getDis(globalStateDict, localStateDict) # Update distance metric
+        # --- Information Entropy Weight Method (IEWM) Logic (now operating on 'device' tensors) ---
+        # Distance already calculated and stored in globalState['s'][3][uid]
 
         # Parameters for getAlpha_iewm (using similar defaults as BAFL's merge for now)
         kexi = 1.0
@@ -175,15 +199,17 @@ def newLocalModel(address):
         print(f"Calculated IEWM alpha for node {address}: {alpha_iewm}")
 
         if alpha_iewm > 0: # Proceed only if alpha is positive
-            updated_global_dict_iewm = copy.deepcopy(globalStateDict)
+            # Perform aggregation directly on globalStateDict (which is on device)
+            updated_global_dict_iewm = globalStateDict # Use the current global state dict
             try:
                 for k in updated_global_dict_iewm.keys():
-                    if k in localStateDict:
-                        updated_global_dict_iewm[k] = (1.0 - alpha_iewm) * updated_global_dict_iewm[k] + alpha_iewm * localStateDict[k]
+                    if k in localStateDict: # localStateDict is already on device
+                        updated_global_dict_iewm[k].data = (1.0 - alpha_iewm) * updated_global_dict_iewm[k].data + alpha_iewm * localStateDict[k].data
                     else:
                         print(f"Warning (IEWM): Key '{k}' not found in local model from {address}. Skipping update for this layer.")
 
-                net_glob.load_state_dict(updated_global_dict_iewm) # Update global model
+                # No need to load state dict again as we modified it in-place (or create a new one if needed)
+                # net_glob.load_state_dict(updated_global_dict_iewm) # Not needed if modified in-place
 
                 # Update timestamp
                 globalState['t'][uid] = current_time
@@ -215,20 +241,20 @@ def newLocalModel(address):
             # globalState['t'][uid] = current_time
 
     elif args.aggregate == 'fedasync':
-        # --- Simple FedAsync Logic ---
+        # --- Simple FedAsync Logic (now operating on 'device' tensors) ---
         # Use a fixed averaging factor (alpha)
         alpha_async = 0.1 # Example fixed alpha for simple async averaging
-        updated_global_dict = copy.deepcopy(globalStateDict)
+        updated_global_dict = globalStateDict # Use the current global state dict (on device)
         try:
             for k in updated_global_dict.keys():
-                 if k in localStateDict:
-                      # Ensure tensors are on the same device and dtype if necessary
-                      # Assuming they are compatible based on previous code structure
-                      updated_global_dict[k] = (1.0 - alpha_async) * updated_global_dict[k] + alpha_async * localStateDict[k]
+                 if k in localStateDict: # localStateDict is already on device
+                      # Perform calculation on device
+                      updated_global_dict[k].data = (1.0 - alpha_async) * updated_global_dict[k].data + alpha_async * localStateDict[k].data
                  else:
                      print(f"Warning: Key '{k}' not found in local model from {address}. Skipping update for this layer.")
 
-            net_glob.load_state_dict(updated_global_dict) # Update global model
+            # No need to load state dict again if modified in-place
+            # net_glob.load_state_dict(updated_global_dict)
             # Update timestamp, score is not calculated in simple FedAsync
             globalState['t'][uid] = time.time()
             # Optionally reset or ignore score: globalState['s'][1][uid] = 0.5 # Reset to default?
@@ -248,18 +274,27 @@ def newLocalModel(address):
 def newGlobalModel():
     global net_glob
     if request.method == 'POST':
-        # 从客户端接收到的全局模型
+        # 从客户端接收到的全局模型 (This part seems less common, usually server sends global model)
+        # If needed, ensure received model is moved to device
         data = request.json
-        globalModelStateDict = hexToStateDict(data['global_model_hex'])
-        net_glob.load_state_dict(globalModelStateDict)
-        return '1'
+        globalModelStateDict_cpu = hexToStateDict(data['global_model_hex'])
+        if globalModelStateDict_cpu:
+             globalModelStateDict = {k: v.to(device) for k, v in globalModelStateDict_cpu.items()}
+             net_glob.load_state_dict(globalModelStateDict)
+             return '1'
+        else:
+             print("Error decoding received global model hex")
+             return '0', 500
     elif request.method == 'GET':
         # 返回当前全局模型的十六进制状态
         if net_glob is None:
             print("No global model available.")
             return jsonify({"error": "No global model available"}), 500
-        
-        state_dict_hex = stateDictToHex(net_glob.state_dict())
+
+        # --- Ensure state dict is moved to CPU before serialization ---
+        state_dict_cpu = {k: v.cpu() for k, v in net_glob.state_dict().items()}
+        state_dict_hex = stateDictToHex(state_dict_cpu)
+        # --- End Ensure state dict is moved to CPU ---
         print(f"Returning global model state: {state_dict_hex[:50]}...")  # 打印部分十六进制以确认返回值
         return jsonify({'global_model_hex': state_dict_hex})
 
@@ -304,5 +339,6 @@ def getModelType():
 
 # 启动服务器
 if __name__ == '__main__':
-    print(f"Starting server on port {args.port}...")
-    socketio.run(app, port=args.port, allow_unsafe_werkzeug=True)
+    print(f"Starting server on port {args.port} with device {device}...") # Updated log message
+    # Note: Flask/SocketIO itself runs on CPU, only torch operations are moved to GPU
+    socketio.run(app, host='0.0.0.0', port=args.port, allow_unsafe_werkzeug=True) # Listen on all interfaces

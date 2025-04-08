@@ -66,13 +66,39 @@ fi
 mkdir -p logs # Ensure the main logs directory exists
 
 # --- Initialize Results File ---
-if [ ! -f "$RESULTS_FILE" ]; then
-    echo "Initializing results file: $RESULTS_FILE"
-    # Add Method and FuzzyM columns
-    echo "Method,FuzzyM,Nodes,Epochs,Accuracy" > "$RESULTS_FILE"
+EXPECTED_HEADER="Method,FuzzyM,Nodes,Epochs,Accuracy,Loss" # Added Loss column
+INITIALIZE_HEADER=false
+
+if [ -f "$RESULTS_FILE" ]; then
+    # File exists, check header
+    CURRENT_HEADER=$(head -n 1 "$RESULTS_FILE")
+    if [ "$CURRENT_HEADER" != "$EXPECTED_HEADER" ]; then
+        echo "Warning: Results file header mismatch. Found '$CURRENT_HEADER', expected '$EXPECTED_HEADER'."
+        BACKUP_FILE="${RESULTS_FILE}.$(date +%Y%m%d_%H%M%S).bak"
+        echo "Backing up existing file to $BACKUP_FILE"
+        mv "$RESULTS_FILE" "$BACKUP_FILE"
+        INITIALIZE_HEADER=true
+    fi
+else
+    # File does not exist, need to initialize
+    INITIALIZE_HEADER=true
+fi
+
+if [ "$INITIALIZE_HEADER" = true ]; then
+    echo "Initializing results file: $RESULTS_FILE with header: $EXPECTED_HEADER"
+    echo "$EXPECTED_HEADER" > "$RESULTS_FILE"
 fi
 
 # --- Start Server ---
+echo "Attempting to forcefully stop any existing server on port $SERVER_PORT..."
+# First, list matching processes to verify the pattern
+echo "Checking for existing server processes on port $SERVER_PORT..."
+pgrep -af "python.*main_server.*port ${SERVER_PORT}" || echo "No matching process found by pgrep."
+# Use pkill to find and kill the specific server process by command line match (using a slightly broader pattern)
+pkill -9 -f "python.*main_server.*port ${SERVER_PORT}" 2>/dev/null || true
+sleep 5 # Increase sleep time further to allow the port to be fully released
+echo "Port cleanup attempt finished."
+
 # Ensure the main logs directory exists
 mkdir -p logs
 # Construct server command, adding fuzzy_m if method is fuzzy
@@ -196,20 +222,26 @@ echo "--- Evaluation Script Output End ---"
 
 # Extract accuracy - Looking for "Global Model Test: Accuracy: XX.XX%"
 ACCURACY=$(echo "$EVAL_OUTPUT" | grep -oP 'Global Model Test: Accuracy: \K[0-9]+\.[0-9]+')
+# Extract loss - Looking for "Average Loss: Y.YYYY"
+LOSS=$(echo "$EVAL_OUTPUT" | grep -oP 'Average Loss: \K[0-9]+\.[0-9]+')
 
-if [ -n "$ACCURACY" ]; then
-    echo "Extracted Accuracy: $ACCURACY%"
-    # Append result to CSV file including the method and FuzzyM
-    FUZZY_M_VAL="N/A"
-    if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then FUZZY_M_VAL=$FUZZY_M; fi
-    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,$ACCURACY" >> "$RESULTS_FILE"
+# Prepare FuzzyM value for CSV
+FUZZY_M_VAL="N/A"
+if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then FUZZY_M_VAL=$FUZZY_M; fi
+
+# Append result to CSV file including the method, FuzzyM, Accuracy, and Loss
+if [ -n "$ACCURACY" ] && [ -n "$LOSS" ]; then
+    echo "Extracted Accuracy: $ACCURACY%, Extracted Loss: $LOSS"
+    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,$ACCURACY,$LOSS" >> "$RESULTS_FILE"
     echo "Result recorded in $RESULTS_FILE"
+elif [ -n "$ACCURACY" ]; then
+    echo "Extracted Accuracy: $ACCURACY%, Failed to extract Loss."
+    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,$ACCURACY,LossError" >> "$RESULTS_FILE"
+    echo "Accuracy recorded, Loss extraction error. Result recorded in $RESULTS_FILE"
 else
-    echo "Could not extract accuracy from evaluation output. Check logs/node_* logs and evaluation script."
-    # Record failure or placeholder, include FuzzyM
-    FUZZY_M_VAL="N/A"
-    if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then FUZZY_M_VAL=$FUZZY_M; fi
-    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,EvalError" >> "$RESULTS_FILE"
+    echo "Could not extract accuracy (and possibly loss) from evaluation output. Check evaluation script output."
+    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,EvalError,EvalError" >> "$RESULTS_FILE"
+    echo "Evaluation error recorded in $RESULTS_FILE"
 fi
 
 
@@ -223,6 +255,20 @@ if ps -p $SERVER_PID > /dev/null; then
    kill -9 $SERVER_PID
 fi
 echo "Server stopped."
+
+# --- Display Final Result Clearly ---
+echo "-----------------------------------------------------"
+if [ -n "$ACCURACY" ] && [ -n "$LOSS" ]; then
+    echo "Final Global Model Accuracy: $ACCURACY%"
+    echo "Final Global Model Loss: $LOSS"
+elif [ -n "$ACCURACY" ]; then
+    echo "Final Global Model Accuracy: $ACCURACY%"
+    echo "Final Global Model Loss: Extraction Error"
+else
+    echo "Final Global Model Accuracy: Evaluation Error"
+    echo "Final Global Model Loss: Evaluation Error"
+fi
+echo "-----------------------------------------------------"
 
 # Update final message
 if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then

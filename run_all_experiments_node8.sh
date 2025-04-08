@@ -6,7 +6,7 @@
 NUM_NODES=8
 METHODS=("fuzzy" "iewm" "fedasync")
 EPOCHS=($(seq 1 10)) # Create a sequence from 1 to 10
-FUZZY_M_VALUES=(2 3 4) # Define fuzzy_m values to test
+FUZZY_M_VALUES=(5) # Define fuzzy_m values to test
 
 # Ensure the script is executable
 chmod +x ./run_experiment.sh

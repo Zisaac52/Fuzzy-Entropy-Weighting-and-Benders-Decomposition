@@ -23,4 +23,10 @@ env/
 
 # Experiment results and logs
 experiment_results.csv
+gpu_experiment_results.csv
 logs/
+logs_gpu*/ # Ignore all GPU log directories
+*.bak
+# gpu_experiment_results/ # Keep ignoring this directory for generated files
+gpu_experiment_results/
+logs_gpu0_method_fuzzy_node_4_epoch_1_fuzzym2/

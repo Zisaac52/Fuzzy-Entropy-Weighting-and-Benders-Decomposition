@@ -37,7 +37,7 @@ def fuzzy_membership(d, r, n=2):
     return np.exp(-(d ** n) / r)
 
 
-def fuzzy_entropy(data, m=5, r=0.2):
+def fuzzy_entropy(data, m=5, r=0.5):
     """
     计算模糊熵 (BAFL specific)
     替代原来的信息熵，但保持熵的基本性质：
