@@ -97,7 +97,7 @@ do
         --gpu $GPU_ID \
         --dataset mnist \
         --iid true \
-        --lr 0.001 \
+        --lr 0.01 \
         --port $SERVER_PORT \
         --address $NODE_ADDRESS \
         --start_train_index $START_TRAIN \

@@ -38,6 +38,13 @@ from models.Fed import getAlpha_iewm, getTauI_iewm, normalization_iewm # IEWM fu
 from utils.options import args_server_parser
 from utils.models import hexToStateDict, stateDictToHex
 
+# --- Enforce deterministic GPU operations ---
+# Note: This might impact performance but helps reproducibility/debugging
+if torch.cuda.is_available():
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+# --- End Enforce deterministic GPU operations ---
+
 # 解析服务器参数
 args = args_server_parser() # args is now available globally in this module
 

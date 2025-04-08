@@ -9,6 +9,13 @@ from utils.sampling import iid, non_iid
 from models.Nets import CNN
 from utils.models import stateDictToHex, hexToStateDict
 
+# --- Enforce deterministic GPU operations ---
+# Note: This might impact performance but helps reproducibility/debugging
+if torch.cuda.is_available():
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+# --- End Enforce deterministic GPU operations ---
+
 # 解析命令行参数
 args = args_node_parser()
 
