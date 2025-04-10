@@ -24,6 +24,9 @@ env/
 # Experiment results and logs
 experiment_results.csv
 gpu_experiment_results.csv
+*.csv
+*.png
+plots_*/ # Ignore all plot directories matching the pattern
 logs/
 logs_gpu*/ # Ignore all GPU log directories
 *.bak

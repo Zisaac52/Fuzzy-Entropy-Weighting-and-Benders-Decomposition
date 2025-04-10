@@ -87,8 +87,8 @@ globalState = {
 # 模型聚合的结果
 weights = []
 
-# Modify merge function signature to accept fuzzy_m
-def merge(uid, address, data, fuzzy_m=2): # Add fuzzy_m parameter with default
+# Modify merge function signature to accept fuzzy_m and fuzzy_r
+def merge(uid, address, data, fuzzy_m=2, fuzzy_r=0.5): # Add fuzzy_r parameter with default
     try:
         print(f"\nMerging local model from node: {address}")
         print(f"Current state - UID: {uid}")
@@ -99,11 +99,11 @@ def merge(uid, address, data, fuzzy_m=2): # Add fuzzy_m parameter with default
         if 'uid' not in data or 'n_d' not in data or 's' not in data:
             print("Missing required data fields")
             return None
-            
-        # Pass fuzzy_m to getAlpha
-        alpha = getAlpha(1, int(time.time()), data['t0'], 0.003, 1, data['uid'], data['n_d'], data['s'], fuzzy_m=fuzzy_m) # Pass fuzzy_m here
+
+        # Pass fuzzy_m and fuzzy_r to getAlpha
+        alpha = getAlpha(1, int(time.time()), data['t0'], 0.003, 1, data['uid'], data['n_d'], data['s'], fuzzy_m=fuzzy_m, fuzzy_r=fuzzy_r) # Pass fuzzy_m and fuzzy_r here
         print(f"Calculated alpha: {alpha}")
-        
+
         if alpha == 0:
             print("Alpha is 0, skipping merge")
             return None
@@ -112,17 +112,17 @@ def merge(uid, address, data, fuzzy_m=2): # Add fuzzy_m parameter with default
         try:
             localStateDict = data['local_state_dict']
             globStateDict = data['global_state_dict']
-            
+
             for k in globStateDict.keys():
                 globStateDict[k] = (1 - alpha) * globStateDict[k] + alpha * localStateDict[k]
-                
+
             stateDictHex = stateDictToHex(globStateDict)
             s = normalization(data['s'])
-            # Pass fuzzy_m to getTauI (which will pass it to getWk)
-            score = getTauI(uid, data['n_d'], s, fuzzy_m=fuzzy_m) # Pass fuzzy_m here
-            
+            # Pass fuzzy_m and fuzzy_r to getTauI (which will pass them to getWk)
+            score = getTauI(uid, data['n_d'], s, fuzzy_m=fuzzy_m, fuzzy_r=fuzzy_r) # Pass fuzzy_m and fuzzy_r here
+
             print(f"Merge completed. Score: {score}")
-            
+
             return {
                 'model_state_hex': stateDictHex,
                 'score': score,
@@ -165,7 +165,7 @@ def newLocalModel(address):
 
     if args.aggregate == 'fuzzy':
         # --- Existing Fuzzy Logic (now operating on 'device' tensors) ---
-        # Pass args.fuzzy_m to merge function
+        # Pass args.fuzzy_m and args.fuzzy_r to merge function
         res = merge(uid, address, { # merge uses getAlpha which uses entropy weights
             "local_state_dict": localStateDict, # On device
             "global_state_dict": globalStateDict, # On device
@@ -173,7 +173,7 @@ def newLocalModel(address):
             "n_d": globalState['n_d'],
             "uid": uid,
             "t0": globalState['t'][uid]
-        }, fuzzy_m=args.fuzzy_m) # Pass args.fuzzy_m here
+        }, fuzzy_m=args.fuzzy_m, fuzzy_r=args.fuzzy_r) # Pass args.fuzzy_m and args.fuzzy_r here
 
         if res:
             # Update global state (time, score) specific to BAFL

@@ -1,0 +1,1990 @@
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..44c2347
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,32 @@
++# Python cache
++__pycache__/
++*.pyc
++*.pyo
++*.pyd
++
++# IDE configuration files
++.idea/
++.vscode/
++
++# Data files (usually large and not version controlled)
++data/
++
++# OS generated files
++.DS_Store
++Thumbs.db
++
++# Virtual environment
++venv/
++env/
++*.env
++.env
++
++# Experiment results and logs
++experiment_results.csv
++gpu_experiment_results.csv
++logs/
++logs_gpu*/ # Ignore all GPU log directories
++*.bak
++# gpu_experiment_results/ # Keep ignoring this directory for generated files
++gpu_experiment_results/
++logs_gpu0_method_fuzzy_node_4_epoch_1_fuzzym2/
+\ No newline at end of file
+diff --git a/README.md b/README.md
+index eab6c1d..f6b0926 100644
+--- a/README.md
++++ b/README.md
+@@ -1,15 +1,144 @@
+-# BAFL-Entropy
+-熵权法用于异步联邦学习
+-代码引用自
++# AFL-Fuzzy-Entropy: Asynchronous Federated Learning with Fuzzy Entropy Weighting
++
++本项目旨在研究和实现一种基于模糊熵加权的异步联邦学习（Asynchronous Federated Learning, AFL）聚合策略。通过为每个本地模型分配基于其模糊熵计算得出的权重，期望能够提高模型聚合的效率和最终模型的性能，特别是在非独立同分布（Non-IID）数据场景下。
++
++## 环境设置
++
++1.  **克隆仓库**:
++    ```bash
++    git clone https://gitee.com/zclisaac/afl-fuzzy-entropy.git
++    cd afl-fuzzy-entropy
++    ```
++
++2.  **安装依赖**:
++    建议使用 Python 虚拟环境 (如 `venv` 或 `conda`)。
++    ```bash
++    # 创建并激活虚拟环境 (可选但推荐)
++    # python3 -m venv venv
++    # source venv/bin/activate  # Linux/macOS
++    # venv\Scripts\activate    # Windows
++
++    # 安装所需的库
++    pip install -r requirements.txt
++    ```
++    *注意*: `requirements.txt` 文件包含了运行此项目所需的所有 Python 库。
++
++## 运行实验
++
++项目提供了脚本来运行单个或批量的联邦学习实验，支持 CPU 和 GPU。
++
++### 运行单个实验 (CPU)
++
++使用 `run_experiment.sh` 脚本来运行具有特定配置的单个实验（使用 CPU）。
++
++**用法:**
++
++```bash
++./run_experiment.sh [--node <num_nodes>] [--epoch <num_epochs>] [--method <aggregate_method>] [--fuzzy_m <m_value>] [--fuzzy_r <r_value>]
+ ```
+-@article{REPO-283,
+-    author = "Feng, Lei and Zhao, Yiqi and Guo, Shaoyong and Qiu, Xuesong and Li, Wenjing and Yu, Peng",
+-    journal = "IEEE Transactions on Computers",
+-    number = "5",
+-    pages = "1092--1103",
+-    publisher = "IEEE",
+-    title = "{BAFL: A Blockchain-Based Asynchronous Federated Learning Framework}",
+-    volume = "71",
+-    year = "2021"
+-}
++
++**参数:**
++
++*   `--node <num_nodes>`: 参与联邦学习的节点数量 (默认为 4)。
++*   `--epoch <num_epochs>`: 每个节点在每一轮聚合前本地训练的轮数 (默认为 1)。
++*   `--method <aggregate_method>`: 使用的聚合方法。可选值:
++    *   `fuzzy` (默认): 模糊熵熵权法。
++    *   `iewm`: 信息熵加权方法。
++    *   `fedasync`: 简单的异步联邦平均。
++*   `--fuzzy_m <m_value>`: 当 `--method` 为 `fuzzy` 时，指定模糊熵计算中的 `m` 参数 (默认为 2)。
++*   `--fuzzy_r <r_value>`: 当 `--method` 为 `fuzzy` 时，指定模糊熵计算中的 `r` 参数 (默认为 0.5)。
++
++**示例:**
++
++*   运行一个使用 8 个节点、每个节点训练 5 轮、采用 Fuzzy 方法、`m=3`, `r=0.7` 的实验：
++    ```bash
++    ./run_experiment.sh --node 8 --epoch 5 --method fuzzy --fuzzy_m 3 --fuzzy_r 0.7
++    ```
++*   运行一个使用默认配置（4 个节点，1 轮，Fuzzy 方法，默认 `m`, `r`）的实验：
++    ```bash
++    ./run_experiment.sh
++    ```
++
++**输出:**
++
++*   实验日志将保存在 `logs/logs_method_<method>_node_<nodes>_epoch_<epochs>.../` 目录下。
++*   最终模型的测试准确率将记录在 `experiment_results.csv` 文件中。
++
++### 运行单个实验 (GPU)
++
++使用 `run_gpu_experiment.sh` 脚本来运行具有特定配置的单个实验（使用 GPU）。
++
++**用法:**
++
++```bash
++./run_gpu_experiment.sh [--gpu <gpu_id>] [--node <num_nodes>] [--epoch <num_epochs>] [--method <aggregate_method>] [--fuzzy_m <m_value>] [--fuzzy_r <r_value>]
+ ```
++
++**参数:**
++
++*   `--gpu <gpu_id>`: 指定使用的 GPU ID (默认为 0)。
++*   其他参数 (`--node`, `--epoch`, `--method`, `--fuzzy_m`, `--fuzzy_r`) 与 CPU 版本脚本相同。
++
++**示例:**
++
++*   在 GPU 1 上运行一个使用 4 个节点、每个节点训练 3 轮、采用 Fuzzy 方法、`m=4`, `r=0.7` 的实验：
++    ```bash
++    ./run_gpu_experiment.sh --gpu 1 --node 4 --epoch 3 --method fuzzy --fuzzy_m 4 --fuzzy_r 0.7
++    ```
++
++**输出:**
++
++*   实验日志将保存在 `logs/logs_gpu<gpu_id>_method_<method>_node_<nodes>_epoch_<epochs>.../` 目录下。
++*   最终模型的测试准确率将记录在 `gpu_experiment_results.csv` 文件中。
++
++### 运行批量实验 (针对 8 个节点)
++
++*   **CPU**: 使用 `run_all_experiments_node8.sh` 脚本可以方便地为 8 个节点运行一系列 CPU 实验，遍历 1 到 10 个训练轮数、所有支持的聚合方法 (`fuzzy`, `iewm`, `fedasync`)，以及预定义的 `fuzzy_m` 和 `fuzzy_r` 值 (在脚本内部指定)。
++    ```bash
++    ./run_all_experiments_node8.sh
++    ```
++*   **GPU**: 使用 `run_all_gpu_experiments_node8.sh` 脚本可以方便地为 8 个节点运行一系列 GPU 实验。该脚本会为每个实验配置自动分配 GPU ID (从 0 开始轮换)。
++    ```bash
++    ./run_all_gpu_experiments_node8.sh
++    ```
++
++所有批量实验的结果将分别记录在 `experiment_results.csv` (CPU) 和 `gpu_experiment_results.csv` (GPU) 中。
++
++## 支持的配置
++
++*   **数据集**:
++    *   MNIST (默认)
++    *   CIFAR-10 (目前仅支持 IID 数据划分)
++    *   *注意*: 数据集在 `utils/options.py` 中通过 `--dataset` 参数配置，目前脚本默认使用 MNIST。
++*   **聚合方法**:
++    *   `fuzzy` (模糊熵加权)
++    *   `iewm` (信息熵加权)
++    *   `fedasync` (简单异步平均)
++*   **数据划分**:
++    *   IID (目前脚本默认使用 IID 划分)
++    *   Non-IID (代码中存在支持，可通过 `--iid` 参数设为 `False` 来启用，但当前运行脚本未显式配置 Non-IID 运行)
++
++## 文件结构概览
++
++*   `main_server.py`: 联邦学习中心服务器逻辑。
++*   `main_node.py`: 联邦学习客户端（节点）逻辑。
++*   `node.py`: 节点训练的核心类。
++*   `models/`:
++    *   `Nets.py`: 包含神经网络模型定义。
++    *   `Fed.py`: 包含联邦学习聚合逻辑 (FedAvg, IEWM, Fuzzy)。
++*   `utils/`:
++    *   `options.py`: 命令行参数解析。
++    *   `dataset.py`: 数据集加载和预处理。
++    *   `sampling.py`: 数据划分 (IID, Non-IID)。
++    *   `models.py`: 模型序列化/反序列化工具。
++*   `run_experiment.sh`: 运行单个 CPU 实验的脚本。
++*   `run_gpu_experiment.sh`: 运行单个 GPU 实验的脚本。
++*   `run_all_experiments_node8.sh`: 运行批量 CPU 实验的脚本 (针对 8 节点)。
++*   `run_all_gpu_experiments_node8.sh`: 运行批量 GPU 实验的脚本 (针对 8 节点)。
++*   `view_aggregated_model.py`: 用于在实验结束后评估最终全局模型的脚本。
++*   `requirements.txt`: 项目依赖库列表。
++*   `experiment_results.csv`: 存储 CPU 实验结果的 CSV 文件。
++*   `gpu_experiment_results.csv`: 存储 GPU 实验结果的 CSV 文件。
++*   `logs/`: 存储实验日志的目录。
++*   `.gitignore`: 指定 Git 忽略的文件和目录。
++*   `README.md`: 本文件。
+diff --git a/__pycache__/node.cpython-311.pyc b/__pycache__/node.cpython-311.pyc
+new file mode 100644
+index 0000000..8491f78
+Binary files /dev/null and b/__pycache__/node.cpython-311.pyc differ
+diff --git a/__pycache__/node.cpython-38.pyc b/__pycache__/node.cpython-38.pyc
+new file mode 100644
+index 0000000..5e0555a
+Binary files /dev/null and b/__pycache__/node.cpython-38.pyc differ
+diff --git a/data/mnist/MNIST/raw/t10k-images-idx3-ubyte b/data/mnist/MNIST/raw/t10k-images-idx3-ubyte
+new file mode 100644
+index 0000000..1170b2c
+Binary files /dev/null and b/data/mnist/MNIST/raw/t10k-images-idx3-ubyte differ
+diff --git a/data/mnist/MNIST/raw/t10k-images-idx3-ubyte.gz b/data/mnist/MNIST/raw/t10k-images-idx3-ubyte.gz
+new file mode 100644
+index 0000000..5ace8ea
+Binary files /dev/null and b/data/mnist/MNIST/raw/t10k-images-idx3-ubyte.gz differ
+diff --git a/data/mnist/MNIST/raw/t10k-labels-idx1-ubyte b/data/mnist/MNIST/raw/t10k-labels-idx1-ubyte
+new file mode 100644
+index 0000000..d1c3a97
+Binary files /dev/null and b/data/mnist/MNIST/raw/t10k-labels-idx1-ubyte differ
+diff --git a/data/mnist/MNIST/raw/t10k-labels-idx1-ubyte.gz b/data/mnist/MNIST/raw/t10k-labels-idx1-ubyte.gz
+new file mode 100644
+index 0000000..a7e1415
+Binary files /dev/null and b/data/mnist/MNIST/raw/t10k-labels-idx1-ubyte.gz differ
+diff --git a/data/mnist/MNIST/raw/train-images-idx3-ubyte b/data/mnist/MNIST/raw/train-images-idx3-ubyte
+new file mode 100644
+index 0000000..bbce276
+Binary files /dev/null and b/data/mnist/MNIST/raw/train-images-idx3-ubyte differ
+diff --git a/data/mnist/MNIST/raw/train-images-idx3-ubyte.gz b/data/mnist/MNIST/raw/train-images-idx3-ubyte.gz
+new file mode 100644
+index 0000000..b50e4b6
+Binary files /dev/null and b/data/mnist/MNIST/raw/train-images-idx3-ubyte.gz differ
+diff --git a/data/mnist/MNIST/raw/train-labels-idx1-ubyte b/data/mnist/MNIST/raw/train-labels-idx1-ubyte
+new file mode 100644
+index 0000000..d6b4c5d
+Binary files /dev/null and b/data/mnist/MNIST/raw/train-labels-idx1-ubyte differ
+diff --git a/data/mnist/MNIST/raw/train-labels-idx1-ubyte.gz b/data/mnist/MNIST/raw/train-labels-idx1-ubyte.gz
+new file mode 100644
+index 0000000..707a576
+Binary files /dev/null and b/data/mnist/MNIST/raw/train-labels-idx1-ubyte.gz differ
+diff --git a/main_node.py b/main_node.py
+index 5845133..6899d81 100644
+--- a/main_node.py
++++ b/main_node.py
+@@ -9,6 +9,13 @@ from utils.sampling import iid, non_iid
+ from models.Nets import CNN
+ from utils.models import stateDictToHex, hexToStateDict
+ 
++# --- Enforce deterministic GPU operations ---
++# Note: This might impact performance but helps reproducibility/debugging
++if torch.cuda.is_available():
++    torch.backends.cudnn.deterministic = True
++    torch.backends.cudnn.benchmark = False
++# --- End Enforce deterministic GPU operations ---
++
+ # 解析命令行参数
+ args = args_node_parser()
+ 
+diff --git a/main_server.py b/main_server.py
+index 1c227c6..2544e02 100644
+--- a/main_server.py
++++ b/main_server.py
+@@ -1,18 +1,61 @@
++def register(address, dataSize):
++    global globalState
++    if address in globalState['uid']:
++        return False  # 节点已存在
++
++    uid = globalState['n_d']  # 分配一个新的 UID
++    globalState['uid'][address] = uid
++    globalState['n_d'] += 1  # 更新节点计数
++    
++    # 确保所有评分列表被正确初始化
++    for i in range(4):  # s有4个子列表
++        while len(globalState['s'][i]) < globalState['n_d']:
++            default_value = 0.0
++            if i == 1:  # 对于得分列表使用0.5作为默认值
++                default_value = 0.5
++            elif i == 2:  # 对于Tau值使用1作为默认值
++                default_value = 1.0
++            globalState['s'][i].append(default_value)
++    
++    globalState['scores'].append(0)
++    globalState['t'].append(time.time())
++    globalState['s'][0][uid] = dataSize  # 设置数据大小
++    
++    return True
+ import base64
+ import io
+ import requests
+-import torch
++import torch # Ensure torch is imported
++import copy # Import copy for deepcopy
+ from flask import Flask, request, jsonify
+ from flask_socketio import SocketIO
+ import time
+ 
+ from models.Nets import CNN
+-from models.Fed import getDis, getAlpha, getTauI, normalization
++# Import fed_avg_aggregate if needed, but we decided against FedAvg for now
++from models.Fed import getDis, getAlpha, getTauI, normalization # BAFL functions
++from models.Fed import getAlpha_iewm, getTauI_iewm, normalization_iewm # IEWM functions
+ from utils.options import args_server_parser
+ from utils.models import hexToStateDict, stateDictToHex
+ 
++# --- Enforce deterministic GPU operations ---
++# Note: This might impact performance but helps reproducibility/debugging
++if torch.cuda.is_available():
++    torch.backends.cudnn.deterministic = True
++    torch.backends.cudnn.benchmark = False
++# --- End Enforce deterministic GPU operations ---
++
+ # 解析服务器参数
+-args = args_server_parser()
++args = args_server_parser() # args is now available globally in this module
++
++# --- 设置服务器设备 ---
++if args.gpu != -1 and torch.cuda.is_available():
++    device = torch.device(f'cuda:{args.gpu}')
++    print(f"Server using GPU: {args.gpu}")
++else:
++    device = torch.device('cpu')
++    print("Server using CPU")
++# --- End 设置服务器设备 ---
+ 
+ # 初始化全局模型
+ def initNetGlob():
+@@ -20,6 +63,7 @@ def initNetGlob():
+         net_glob = CNN(num_classes=args.num_classes, num_channels=args.num_channels)
+     else:
+         exit('Error: unrecognized model')
++    net_glob.to(device) # <-- 将模型移动到指定设备
+     return net_glob
+ 
+ # 初始化 Flask 应用和 SocketIO
+@@ -27,7 +71,7 @@ app = Flask(__name__)
+ socketio = SocketIO(app)
+ 
+ # 初始化全局模型
+-net_glob = initNetGlob()
++net_glob = initNetGlob() # net_glob is now on the correct device
+ 
+ # 全局状态，用于管理多个节点的状态
+ globalState = {
+@@ -43,79 +87,221 @@ globalState = {
+ # 模型聚合的结果
+ weights = []
+ 
+-# 合并本地模型到全局模型
+-def merge(uid, address, data):
+-    print("Merging local model from node:", address)
+-    alpha = getAlpha(1, int(time.time()), data['t0'], 0.003, 1, data['uid'], data['n_d'], data['s'])
+-    if alpha == 0:
+-        return
+-    
+-    localStateDict = data['local_state_dict']
+-    globStateDict = data['global_state_dict']
+-    
+-    # 更新全局模型参数
+-    for k in globStateDict.keys():
+-        globStateDict[k] = (1 - alpha) * globStateDict[k] + alpha * localStateDict[k]
+-
+-    stateDictHex = stateDictToHex(globStateDict)
+-    s = normalization(data['s'])
+-    score = getTauI(uid, data['n_d'], s)
+-    
+-    return {
+-        'model_state_hex': stateDictHex,
+-        'score': score,
+-        'address': address,
+-        'cur_global_state_dict': globStateDict
+-    }
++# Modify merge function signature to accept fuzzy_m
++def merge(uid, address, data, fuzzy_m=2): # Add fuzzy_m parameter with default
++    try:
++        print(f"\nMerging local model from node: {address}")
++        print(f"Current state - UID: {uid}")
++        print(f"Data state: n_d={data['n_d']}, t0={data['t0']}")
++        print(f"S matrix shape: {[len(s) for s in data['s']]}")
++        
++        # 验证输入数据
++        if 'uid' not in data or 'n_d' not in data or 's' not in data:
++            print("Missing required data fields")
++            return None
++            
++        # Pass fuzzy_m to getAlpha
++        alpha = getAlpha(1, int(time.time()), data['t0'], 0.003, 1, data['uid'], data['n_d'], data['s'], fuzzy_m=fuzzy_m) # Pass fuzzy_m here
++        print(f"Calculated alpha: {alpha}")
++        
++        if alpha == 0:
++            print("Alpha is 0, skipping merge")
++            return None
++            
++        # 模型更新
++        try:
++            localStateDict = data['local_state_dict']
++            globStateDict = data['global_state_dict']
++            
++            for k in globStateDict.keys():
++                globStateDict[k] = (1 - alpha) * globStateDict[k] + alpha * localStateDict[k]
++                
++            stateDictHex = stateDictToHex(globStateDict)
++            s = normalization(data['s'])
++            # Pass fuzzy_m to getTauI (which will pass it to getWk)
++            score = getTauI(uid, data['n_d'], s, fuzzy_m=fuzzy_m) # Pass fuzzy_m here
++            
++            print(f"Merge completed. Score: {score}")
++            
++            return {
++                'model_state_hex': stateDictHex,
++                'score': score,
++                'address': address,
++                'cur_global_state_dict': globStateDict
++            }
++        except Exception as e:
++            print(f"Error during model update: {str(e)}")
++            return None
++            
++    except Exception as e:
++        print(f"Error in merge: {str(e)}")
++        return None
+ 
+ # 接收并合并节点的本地模型
+ @app.route('/newLocalModel/<address>', methods=['POST'])
+ def newLocalModel(address):
+     data = request.json
+-    localStateDict = hexToStateDict(data['local_model_hex'])
+-    
++    localStateDict_cpu = hexToStateDict(data['local_model_hex']) # Initially on CPU
++    if localStateDict_cpu is None:
++        print(f"Error decoding local model hex from {address}")
++        return '0', 500
++
++    # --- Move local state dict to server's device ---
++    localStateDict = {k: v.to(device) for k, v in localStateDict_cpu.items()}
++    # --- End Move local state dict ---
++
+     global net_glob
+-    globalStateDict = net_glob.state_dict()  # 获取当前全局模型的状态字典
+-    
++    globalStateDict = net_glob.state_dict()  # 获取当前全局模型的状态字典 (already on device)
+     uid = globalState['uid'][address]  # 获取节点的 UID
+-    globalState['s'][3][uid] = getDis(globalStateDict, localStateDict)  # 更新距离
+-
+-    # 合并本地模型到全局模型
+-    res = merge(uid, address, {
+-        "local_state_dict": localStateDict,
+-        "global_state_dict": globalStateDict,
+-        "s": globalState['s'],
+-        "n_d": globalState['n_d'],
+-        "uid": uid,
+-        "t0": globalState['t'][uid]
+-    })
+-
+-    if res:
+-        # 更新全局状态
+-        globalState['t'][uid] = time.time()
+-        globalState['s'][1][uid] = float(res['score'])
+-        net_glob.load_state_dict(hexToStateDict(res['model_state_hex']))  # 更新全局模型
+-        print(f"Model from {address} successfully merged into global model.")
+-    
+-    return '1'
++
++    # --- Ensure getDis is called with tensors on the same device ---
++    try:
++        distance = getDis(globalStateDict, localStateDict) # Both should be on 'device' now
++        globalState['s'][3][uid] = distance
++    except Exception as e:
++        print(f"Error calculating distance for node {address}: {e}")
++        # Handle error appropriately, maybe skip update or use default distance
++        globalState['s'][3][uid] = 0.0 # Example: set default distance
++
++    if args.aggregate == 'fuzzy':
++        # --- Existing Fuzzy Logic (now operating on 'device' tensors) ---
++        # Pass args.fuzzy_m to merge function
++        res = merge(uid, address, { # merge uses getAlpha which uses entropy weights
++            "local_state_dict": localStateDict, # On device
++            "global_state_dict": globalStateDict, # On device
++            "s": globalState['s'],
++            "n_d": globalState['n_d'],
++            "uid": uid,
++            "t0": globalState['t'][uid]
++        }, fuzzy_m=args.fuzzy_m) # Pass args.fuzzy_m here
++
++        if res:
++            # Update global state (time, score) specific to BAFL
++            globalState['t'][uid] = time.time()
++            # Score is now calculated within merge using fuzzy_m, so use the returned score
++            globalState['s'][1][uid] = float(res['score'])
++            # net_glob is already on the correct device, load_state_dict handles it
++            net_glob.load_state_dict(res['cur_global_state_dict']) # Use the returned state dict directly
++            print(f"Model from {address} successfully merged into global model using Fuzzy.")
++        else:
++             print(f"Fuzzy merge returned None for node {address}. Global model not updated.")
++             # Decide if we should still update the timestamp
++             # globalState['t'][uid] = time.time() # Update time even if merge fails?
++
++    elif args.aggregate == 'iewm':
++        # --- Information Entropy Weight Method (IEWM) Logic (now operating on 'device' tensors) ---
++        # Distance already calculated and stored in globalState['s'][3][uid]
++
++        # Parameters for getAlpha_iewm (using similar defaults as BAFL's merge for now)
++        kexi = 1.0
++        theta = 0.003
++        R0 = 1.0
++        current_time = time.time()
++        t0 = globalState['t'][uid]
++        N_D = globalState['n_d']
++        s_metrics = globalState['s'] # Use the same metrics as BAFL for now
++
++        # Calculate alpha using IEWM functions
++        alpha_iewm = getAlpha_iewm(kexi, current_time, t0, theta, R0, uid, N_D, s_metrics)
++        print(f"Calculated IEWM alpha for node {address}: {alpha_iewm}")
++
++        if alpha_iewm > 0: # Proceed only if alpha is positive
++            # Perform aggregation directly on globalStateDict (which is on device)
++            updated_global_dict_iewm = globalStateDict # Use the current global state dict
++            try:
++                for k in updated_global_dict_iewm.keys():
++                    if k in localStateDict: # localStateDict is already on device
++                        updated_global_dict_iewm[k].data = (1.0 - alpha_iewm) * updated_global_dict_iewm[k].data + alpha_iewm * localStateDict[k].data
++                    else:
++                        print(f"Warning (IEWM): Key '{k}' not found in local model from {address}. Skipping update for this layer.")
++
++                # No need to load state dict again as we modified it in-place (or create a new one if needed)
++                # net_glob.load_state_dict(updated_global_dict_iewm) # Not needed if modified in-place
++
++                # Update timestamp
++                globalState['t'][uid] = current_time
++
++                # Optionally calculate and update score based on IEWM's TauI
++                try:
++                    # Use the normalized metrics as used within getAlpha_iewm
++                    s_normalized_iewm = normalization_iewm(s_metrics)
++                    if s_normalized_iewm: # Check if normalization was successful
++                        score_iewm = getTauI_iewm(uid, N_D, s_normalized_iewm)
++                        globalState['s'][1][uid] = float(score_iewm)
++                        print(f"IEWM Score calculated for node {address}: {score_iewm}")
++                    else:
++                         print(f"Warning (IEWM): Normalization failed, cannot calculate score for node {address}.")
++                         globalState['s'][1][uid] = 0.5 # Reset to default?
++                except Exception as e:
++                    print(f"Error calculating IEWM score for node {address}: {e}")
++                    globalState['s'][1][uid] = 0.5 # Reset to default on error
++
++                print(f"Model from {address} successfully merged into global model using IEWM (alpha={alpha_iewm}).")
++
++            except Exception as e:
++                print(f"Error during IEWM aggregation for node {address}: {e}")
++                # Don't return '0' here as it might break client expectation of '1'
++                # Just log the error and the global model won't be updated by this client
++        else:
++            print(f"IEWM alpha is 0 or less for node {address}, skipping merge.")
++            # Optionally update timestamp even if merge is skipped?
++            # globalState['t'][uid] = current_time
++
++    elif args.aggregate == 'fedasync':
++        # --- Simple FedAsync Logic (now operating on 'device' tensors) ---
++        # Use a fixed averaging factor (alpha)
++        alpha_async = 0.1 # Example fixed alpha for simple async averaging
++        updated_global_dict = globalStateDict # Use the current global state dict (on device)
++        try:
++            for k in updated_global_dict.keys():
++                 if k in localStateDict: # localStateDict is already on device
++                      # Perform calculation on device
++                      updated_global_dict[k].data = (1.0 - alpha_async) * updated_global_dict[k].data + alpha_async * localStateDict[k].data
++                 else:
++                     print(f"Warning: Key '{k}' not found in local model from {address}. Skipping update for this layer.")
++
++            # No need to load state dict again if modified in-place
++            # net_glob.load_state_dict(updated_global_dict)
++            # Update timestamp, score is not calculated in simple FedAsync
++            globalState['t'][uid] = time.time()
++            # Optionally reset or ignore score: globalState['s'][1][uid] = 0.5 # Reset to default?
++            print(f"Model from {address} successfully merged into global model using FedAsync (alpha={alpha_async}).")
++        except Exception as e:
++            print(f"Error during FedAsync aggregation for node {address}: {e}")
++            return '0', 500 # Indicate server error
++
++    else:
++        print(f"Error: Unknown aggregation method '{args.aggregate}'")
++        return '0', 500 # Internal server error
++
++    return '1' # Indicate success
+ 
+ # 返回或上传全局模型
+ @app.route('/newGlobalModel', methods=['GET', 'POST'])
+ def newGlobalModel():
+     global net_glob
+     if request.method == 'POST':
+-        # 从客户端接收到的全局模型
++        # 从客户端接收到的全局模型 (This part seems less common, usually server sends global model)
++        # If needed, ensure received model is moved to device
+         data = request.json
+-        globalModelStateDict = hexToStateDict(data['global_model_hex'])
+-        net_glob.load_state_dict(globalModelStateDict)
+-        return '1'
++        globalModelStateDict_cpu = hexToStateDict(data['global_model_hex'])
++        if globalModelStateDict_cpu:
++             globalModelStateDict = {k: v.to(device) for k, v in globalModelStateDict_cpu.items()}
++             net_glob.load_state_dict(globalModelStateDict)
++             return '1'
++        else:
++             print("Error decoding received global model hex")
++             return '0', 500
+     elif request.method == 'GET':
+         # 返回当前全局模型的十六进制状态
+         if net_glob is None:
+             print("No global model available.")
+             return jsonify({"error": "No global model available"}), 500
+-        
+-        state_dict_hex = stateDictToHex(net_glob.state_dict())
++
++        # --- Ensure state dict is moved to CPU before serialization ---
++        state_dict_cpu = {k: v.cpu() for k, v in net_glob.state_dict().items()}
++        state_dict_hex = stateDictToHex(state_dict_cpu)
++        # --- End Ensure state dict is moved to CPU ---
+         print(f"Returning global model state: {state_dict_hex[:50]}...")  # 打印部分十六进制以确认返回值
+         return jsonify({'global_model_hex': state_dict_hex})
+ 
+@@ -160,5 +346,6 @@ def getModelType():
+ 
+ # 启动服务器
+ if __name__ == '__main__':
+-    print(f"Starting server on port {args.port}...")
+-    socketio.run(app, port=args.port, allow_unsafe_werkzeug=True)
++    print(f"Starting server on port {args.port} with device {device}...") # Updated log message
++    # Note: Flask/SocketIO itself runs on CPU, only torch operations are moved to GPU
++    socketio.run(app, host='0.0.0.0', port=args.port, allow_unsafe_werkzeug=True) # Listen on all interfaces
+diff --git a/models/Fed.py b/models/Fed.py
+index 33ed8de..ec7b42c 100644
+--- a/models/Fed.py
++++ b/models/Fed.py
+@@ -3,11 +3,13 @@
+ # Python version: 3.6
+ 
+ import copy
+-
++import numpy as np
+ import torch
+ import math
+ 
+ 
++# === Functions for BAFL (Fuzzy Entropy) and FedAsync ===
++
+ def FedAvg(w):
+     w_avg = copy.deepcopy(w[0])
+     for k in w_avg.keys():
+@@ -17,81 +19,483 @@ def FedAvg(w):
+     return w_avg
+ 
+ 
+-def getDis(globalW, w):
++def getDis(globalW, w): # Used by BAFL and potentially IEWM
+     sumDis = 0
+     w_avg = copy.deepcopy(w)
+     for i in w_avg.keys():
+         sumDis += torch.norm(w[i] - globalW[i], 2)
+-
+     return pow(float(sumDis), 0.5)
+ 
+ 
+-def getP(s_k, s_k_i):
++def fuzzy_membership(d, r, n=2):
++    """
++    计算模糊隶属度 (BAFL specific)
++    d: 距离
++    r: 半径参数
++    n: 模糊指数(通常取2)
++    """
++    return np.exp(-(d ** n) / r)
++
++
++def fuzzy_entropy(data, m=5, r=0.5):
++    """
++    计算模糊熵 (BAFL specific)
++    替代原来的信息熵，但保持熵的基本性质：
++    1. 非负性
++    2. 单调性
++    3. 极值性
++    """
++    try:
++        N = len(data)
++        if N < m + 1:
++            return 0
++
++        # 数据标准化
++        data = np.array(data, dtype=float)
++        std = np.std(data)
++        if std == 0:
++            return 0
++
++        r = r * std
++        phi_m = 0
++        phi_m1 = 0
++
++        # 计算模糊熵
++        for i in range(N - m):
++            count_m = 0
++            count_m1 = 0
++
++            for j in range(N - m):
++                if i == j:
++                    continue
++
++                # 计算模式距离
++                d_m = max([abs(data[i + k] - data[j + k]) for k in range(m)])
++                d_m1 = max([abs(data[i + k] - data[j + k]) for k in range(m + 1)])
++
++                # 计算模糊隶属度
++                count_m += fuzzy_membership(d_m, r)
++                count_m1 += fuzzy_membership(d_m1, r)
++
++            phi_m += count_m / (N - m - 1)
++            phi_m1 += count_m1 / (N - m - 1)
++
++        if phi_m == 0:
++            return 0
++
++        # 返回模糊熵值
++        return -np.log(phi_m1 / phi_m)
++    except Exception as e:
++        print(f"Error in fuzzy_entropy: {str(e)}")
++        return 0
++
++
++def getWk(N_D, s, s_i, fuzzy_m=5): # Add fuzzy_m parameter
++    """
++    计算权重 (BAFL specific - uses fuzzy_entropy)
++    保持原有的熵权法计算逻辑：
++    1. 计算熵值
++    2. 计算差异系数
++    3. 归一化得到权重
++    """
++    try:
++        if N_D <= 1:  # 至少需要2个样本
++            # Return equal weight if only one sample or less
++            return 1.0 / len(s) if len(s) > 0 else 1.0 # Avoid division by zero if s is empty
++
++        # 计算当前指标的熵值
++        # Pass fuzzy_m to fuzzy_entropy
++        entropy = fuzzy_entropy(s_i, m=fuzzy_m)
++
++        # 计算所有指标的熵值之和
++        sum_entropy = 0
++        valid_metrics_count = 0 # Count metrics that are not empty
++        for i in range(len(s)):
++            if s[i]: # Check if the metric list is not empty
++                # Pass fuzzy_m to fuzzy_entropy
++                sum_entropy += fuzzy_entropy(s[i], m=fuzzy_m)
++                valid_metrics_count += 1
++
++        if valid_metrics_count == 0: # Handle case where all metric lists in s are empty
++             return 1.0 / len(s) if len(s) > 0 else 1.0 # Return equal weight or 1.0 if s is empty
++
++        # 计算差异系数 (1 - 熵值)
++        diff_coefficient = 1 - entropy
++
++        # 所有指标的差异系数之和 (use valid_metrics_count)
++        sum_diff_coefficient = valid_metrics_count - sum_entropy
++
++        if sum_diff_coefficient == 0:
++             # Return equal weight among valid metrics
++            return 1.0 / valid_metrics_count if valid_metrics_count > 0 else 1.0
++
++        # 计算权重 (保持原有的权重计算公式)
++        weight = diff_coefficient / sum_diff_coefficient
++
++        # Ensure weight is non-negative
++        return max(0.0, weight)
++    except Exception as e:
++        print(f"Error in getWk: {str(e)}")
++        # Return equal weight on error
++        return 1.0 / len(s) if len(s) > 0 else 1.0
++
++
++def getTauI(i, N_D, s, fuzzy_m=2): # Add fuzzy_m parameter
++    """
++    计算综合得分 (BAFL specific - uses getWk with fuzzy_entropy)
++    保持原有的加权求和逻辑
++    """
++    try:
++        sum_score = 0
++        sum_weight = 0
++
++        # 计算加权和
++        for k in range(len(s)):
++            # Check if s[k] is valid and has element at index i
++            if s[k] and len(s[k]) > i:
++                # Pass fuzzy_m to getWk
++                weight = getWk(N_D, s, s[k], fuzzy_m=fuzzy_m) # BAFL's getWk
++                # Ensure s[k][i] is numeric before multiplication
++                try:
++                    value = float(s[k][i])
++                    sum_score += weight * value
++                    sum_weight += weight
++                except (ValueError, TypeError):
++                    print(f"Warning in getTauI: Non-numeric value encountered at s[{k}][{i}]: {s[k][i]}. Skipping.")
++                    continue # Skip this metric for the current node
++
++        if sum_weight == 0:
++            print("Warning in getTauI: Sum of weights is zero. Returning default score 0.5.")
++            return 0.5
++
++        # 返回归一化后的得分
++        # Ensure score is within a reasonable range if needed, e.g., [0, 1] if s[k][i] are normalized
++        calculated_score = sum_score / sum_weight
++        # return max(0.0, min(1.0, calculated_score)) # Optional: Clamp score if needed
++        return calculated_score
++    except Exception as e:
++        print(f"Error in getTauI: {str(e)}")
++        return 0.5 # Return default score on error
++
++
++# 根据牛顿冷却法取得当前模型的权重 (Used by BAFL and IEWM)
++def getR(t, t0, theta, R0):
++    return R0 * pow(math.e, -1 * (theta * (t - t0)))
++
++
++def normalization(s):
++    """
++    归一化处理，添加错误处理 (Used by BAFL)
++    """
++    try:
++        if not s:
++            return 0
++
++        res = []
++        for k in range(len(s)):
++            if not s[k]:
++                res.append([])
++                continue
++
++            current_sum = sum(s[k])
++            if current_sum == 0:
++                res.append([0] * len(s[k]))
++            else:
++                res.append([val / current_sum for val in s[k]])
++
++        return res
++    except Exception as e:
++        print(f"Error in normalization: {str(e)}")
++        return 0
++
++
++def getAlpha(kexi, t, t0, theta, R0, i, N_D, s, fuzzy_m=2): # Add fuzzy_m parameter
++    """
++    计算最终权重 (BAFL specific - uses BAFL's normalization and getTauI)
++    保持原有的时间衰减和熵权重组合逻辑
++    """
++    try:
++        if N_D <= 0:
++            return 0
++
++        # 归一化数据
++        s_norm = normalization(s) # BAFL's normalization
++        if s_norm == 0:
++            return 0
++
++        # 计算时间衰减因子
++        time_factor = getR(t, t0, theta, R0)
++
++        # 计算熵权重
++        # Pass fuzzy_m to getTauI
++        entropy_weight = getTauI(i, N_D, s_norm, fuzzy_m=fuzzy_m) # BAFL's getTauI
++
++        # 计算最终权重 (保持原有公式)
++        alpha = kexi * time_factor * entropy_weight
++
++        return max(0.0, min(1.0, alpha))
++    except Exception as e:
++        print(f"Error in getAlpha: {str(e)}")
++        return 0
++
++
++# FedAvg 聚合函数 (Can be used as a baseline or part of other methods)
++def fed_avg_aggregate(global_dict, local_dicts, data_sizes):
++    """
++    使用 FedAvg 算法聚合本地模型。
++    :param global_dict: 当前全局模型的状态字典。
++    :param local_dicts: 包含多个本地模型状态字典的列表。
++    :param data_sizes: 每个本地模型对应的数据集大小列表。
++    :return: 聚合后的全局模型状态字典。
++    """
++    total_data_size = sum(data_sizes)
++    if total_data_size == 0:
++        # 如果没有数据，直接返回原始全局模型
++        return global_dict
++
++    aggregated_dict = copy.deepcopy(global_dict) # Start with a copy of the global dict
++
++    for k in aggregated_dict.keys():
++        # Calculate the weighted sum for the current layer
++        weighted_sum = torch.zeros_like(aggregated_dict[k], dtype=torch.float32)
++        for i, local_dict in enumerate(local_dicts):
++            if k in local_dict: # Ensure the key exists in the local dict
++                weighted_sum += local_dict[k] * (data_sizes[i] / total_data_size)
++            else:
++                # Handle cases where a layer might be missing in a local model (optional, depends on FL setup)
++                print(f"Warning: Key '{k}' not found in local model {i}. Using global model value for this layer.")
++                # Option 1: Use the global model's value (effectively giving it zero weight from this client)
++                # weighted_sum += aggregated_dict[k] * (data_sizes[i] / total_data_size) # This might not be desired
++                # Option 2: Skip this client for this layer (adjust total weight accordingly - more complex)
++                # Option 3: Raise an error
++                # For simplicity, let's assume all models have the same structure and use the global value weighted by its proportion
++                # A better approach might be needed depending on the exact FL scenario.
++                # Let's stick to the standard FedAvg assumption: all models have the same keys.
++                # If a key is missing, it indicates an issue. We'll add the weighted global value for now.
++                pass # Or handle appropriately
++
++        aggregated_dict[k] = weighted_sum
++
++    return aggregated_dict
++
++
++# === Functions for Information Entropy Weight Method (IEWM) ===
++# === Copied and adapted from temp.py ===
++
++def getP_iewm(s_k, s_k_i):
++    """IEWM specific"""
+     if s_k_i == 0:
+         return 0
+     sum_s_k = 0
+-    for cur_s_k_i in s_k:
+-        sum_s_k += cur_s_k_i
+-    return s_k_i / sum_s_k
++    # Ensure s_k is iterable and contains numbers
++    try:
++        for cur_s_k_i in s_k:
++            sum_s_k += cur_s_k_i
++        if sum_s_k == 0:
++            return 0 # Avoid division by zero
++        return s_k_i / sum_s_k
++    except TypeError:
++        print(f"Error in getP_iewm: s_k is not iterable or contains non-numeric types. s_k: {s_k}")
++        return 0
++
++
++def getEk_iewm(N_D, s_k):
++    """IEWM specific - uses standard math.log"""
++    if N_D <= 1: # log(1) is 0, causing division by zero
++        print("Warning in getEk_iewm: N_D <= 1, returning 0 entropy.")
++        return 0
++    log_N_D = math.log(N_D)
++    if log_N_D == 0: # Should not happen if N_D > 1, but as a safeguard
++         print("Warning in getEk_iewm: math.log(N_D) is 0, returning 0 entropy.")
++         return 0
+ 
++    sum_val = 0
++    # Ensure s_k has length N_D
++    if len(s_k) != N_D:
++         print(f"Warning in getEk_iewm: Length of s_k ({len(s_k)}) does not match N_D ({N_D}). Using length of s_k.")
++         # Adjust N_D or handle error based on desired logic. Using len(s_k) for now.
++         # N_D = len(s_k)
++         # if N_D <= 1: return 0
++         # log_N_D = math.log(N_D)
++         # if log_N_D == 0: return 0
++         # Or maybe return an error indicator? For now, proceed with caution.
+ 
+-def getEk(N_D, s_k):
+-    sum = 0
+-    for i in range(N_D):
+-        p = getP(s_k, s_k[i])
++    for i in range(len(s_k)): # Iterate over actual length of s_k
++        # Use the actual value s_k[i]
++        p = getP_iewm(s_k, s_k[i])
+         if p == 0:
+             continue
+-        sum += p * math.log(p)
+-    return -1.0 * (1 / math.log(N_D)) * sum
++        # Ensure p is positive for log
++        if p < 0:
++            print(f"Warning in getEk_iewm: Calculated probability p ({p}) is negative. Skipping.")
++            continue
++        try:
++            sum_val += p * math.log(p)
++        except ValueError:
++             print(f"Error in getEk_iewm: math.log domain error for p = {p}. Skipping.")
++             continue # Skip this term if log(p) is invalid
+ 
++    # Check log_N_D again before division
++    if log_N_D == 0:
++        print("Error in getEk_iewm: log_N_D became 0 unexpectedly. Cannot calculate entropy.")
++        return 0 # Or handle as appropriate
+ 
+-# 根据熵权法取得当前指标的权重
+-def getWk(N_D, s, s_i):
+-    sum = 0
+-    for i in range(len(s)):
+-        sum += getEk(N_D, s[i])
+-    return (1 - getEk(N_D, s_i)) / (len(s) - sum)
++    return -1.0 * (1 / log_N_D) * sum_val
+ 
+ 
+-def getTauI(i, N_D, s):
+-    sum = 0
+-    for k in range(len(s)):
+-        sum += getWk(N_D, s, s[k]) * s[k][i]
+-    return sum
++def getWk_iewm(N_D, s, s_k_list):
++    """IEWM specific - uses getEk_iewm"""
++    sum_Ek = 0
++    num_metrics = len(s) # Number of metric lists in s
++    if num_metrics == 0:
++        print("Warning in getWk_iewm: Input 's' is empty.")
++        return 0
+ 
++    for k in range(num_metrics):
++        # Ensure s[k] is a valid list/iterable for getEk_iewm
++        if isinstance(s[k], (list, tuple, np.ndarray)):
++             # Check if N_D matches the length of the inner list s[k]
++             # if len(s[k]) != N_D:
++             #     print(f"Warning in getWk_iewm: Length mismatch for metric {k}. N_D={N_D}, len(s[k])={len(s[k])}")
++                 # Decide how to handle: skip, adjust N_D, error?
++             sum_Ek += getEk_iewm(N_D, s[k])
++        else:
++            print(f"Warning in getWk_iewm: Metric {k} in 's' is not a list/array. Skipping.")
++            # Adjust num_metrics if skipping?
++            num_metrics -= 1 # Decrement count of valid metrics if skipping one
++            if num_metrics <= 0: # Avoid division by zero later
++                 print("Error in getWk_iewm: No valid metrics found in 's'.")
++                 return 0
+ 
+-# 根据牛顿冷却法取得当前模型的权重
+-def getR(t, t0, theta, R0):
+-    return R0 * pow(math.e, -1 * (theta * (t - t0)))
++    # Calculate denominator: num_metrics - sum_Ek
++    denominator = num_metrics - sum_Ek
++    if denominator == 0:
++        # Handle case where all entropies are 1 (or num_metrics equals sum_Ek)
++        # Return equal weight or handle as error? Equal weight seems reasonable.
++        print("Warning in getWk_iewm: Denominator is zero. Returning equal weight.")
++        return 1.0 / num_metrics if num_metrics > 0 else 0
+ 
++    # Calculate entropy for the specific metric list s_k_list
++    Ek_current = getEk_iewm(N_D, s_k_list)
+ 
+-def normalization(s):
++    # Calculate weight
++    weight = (1 - Ek_current) / denominator
++    return weight
++
++
++def getTauI_iewm(i, N_D, s):
++    """IEWM specific - uses getWk_iewm"""
++    sum_val = 0
++    if not isinstance(s, (list, tuple)) or len(s) == 0:
++        print("Error in getTauI_iewm: Input 's' is not a valid list or is empty.")
++        return 0 # Or a default value like 0.5?
++
++    num_metrics = len(s)
++    total_weight = 0 # Keep track of total weight for normalization if needed
++
++    for k in range(num_metrics):
++        # Ensure s[k] is a list and has element at index i
++        if isinstance(s[k], (list, tuple, np.ndarray)) and len(s[k]) > i:
++            # Check if N_D matches len(s[k]) - consistency check
++            # if len(s[k]) != N_D:
++            #     print(f"Warning in getTauI_iewm: Length mismatch for metric {k}. N_D={N_D}, len(s[k])={len(s[k])}")
++                # Handle mismatch if necessary
++
++            wk = getWk_iewm(N_D, s, s[k])
++            # Ensure s[k][i] is a number
++            try:
++                value = float(s[k][i]) # Attempt to convert to float
++                sum_val += wk * value
++                total_weight += wk # Accumulate weight
++            except (ValueError, TypeError):
++                 print(f"Warning in getTauI_iewm: Value s[{k}][{i}] is not numeric ({s[k][i]}). Skipping.")
++                 continue
++        else:
++            # Handle cases where s[k] is not a list or index i is out of bounds
++            print(f"Warning in getTauI_iewm: Metric {k} is invalid or index {i} is out of bounds. Skipping.")
++            continue
++
++    # Optional: Normalize by total weight if weights don't sum to 1
++    # if total_weight != 0 and total_weight != 1:
++    #     print(f"Normalizing TauI_iewm score by total weight: {total_weight}")
++    #     return sum_val / total_weight
++
++    return sum_val # Return the weighted sum
++
++
++def normalization_iewm(s):
++    """IEWM specific normalization (sum normalization)"""
+     res = []
++    if not isinstance(s, (list, tuple)):
++        print("Error in normalization_iewm: Input 's' is not a list or tuple.")
++        return [] # Return empty list on error
++
+     for k in range(len(s)):
+         res.append([])
+-        # min = s[k][0]
+-        # max = s[k][0]
+-        # for i in range(len(s[k])):
+-        #     if s[k][i] < min:
+-        #         min = s[k][i]
+-        #     if s[k][i] > max:
+-        #         max = s[k][i]
+-        sum = 0
+-        for i in range(len(s[k])):
+-            sum += s[k][i]
+-        if sum == 0:
+-            return 0
+-        # for i in range(len(s[k])):
+-        #     if max == min:
+-        #         res[k].append(1/len(s[k]))
+-        #         continue
+-        #     res[k].append((s[k][i] - min) / (max - min))
+-        for i in range(len(s[k])):
+-            res[k].append(s[k][i] / sum)
++        if not isinstance(s[k], (list, tuple, np.ndarray)):
++             print(f"Warning in normalization_iewm: Element {k} in 's' is not a list/array. Appending empty list.")
++             continue # Skip to next element
++
++        # Calculate sum of the current sublist s[k]
++        try:
++            current_sum = sum(s[k])
++        except TypeError:
++             print(f"Warning in normalization_iewm: Element {k} contains non-numeric types. Cannot sum. Appending empty list.")
++             continue # Skip to next element
++
++        if current_sum == 0:
++             # If sum is 0, append list of zeros or handle as needed
++             # Appending list of zeros to maintain structure
++             res[k] = [0.0] * len(s[k])
++             # print(f"Warning in normalization_iewm: Sum of element {k} is zero.")
++             continue
++
++        # Normalize: divide each element by the sum
++        try:
++            res[k] = [float(val) / current_sum for val in s[k]]
++        except (TypeError, ValueError):
++             print(f"Warning in normalization_iewm: Element {k} contains non-numeric types. Could not normalize. Appending empty list.")
++             res[k] = [] # Reset to empty on error during division
++             continue
++
++    # Check if the outer list 'res' is empty, which might happen if 's' was empty or all elements failed
++    if not res:
++        print("Warning in normalization_iewm: Resulting normalized list is empty.")
++        # Decide return value: empty list, 0, None? Returning empty list for now.
++        return []
++
++    # Check if normalization resulted in lists of different lengths if that's unexpected
++    # ...
++
++    # The original code returned 0 if the *first* sublist sum was 0.
++    # Returning the list `res` seems more appropriate.
++    # Let's refine the check for the first sublist sum being zero if that specific behavior is needed.
++    # if len(s) > 0 and isinstance(s[0], (list, tuple, np.ndarray)) and sum(s[0]) == 0:
++    #      print("Warning: Sum of the first sublist is zero in normalization_iewm.")
++         # return 0 # Original behavior - might be problematic
++
+     return res
+ 
+ 
+-def getAlpha(kexi, t, t0, theta, R0, i, N_D, s):
++def getAlpha_iewm(kexi, t, t0, theta, R0, i, N_D, s):
++    """IEWM specific alpha calculation"""
+     # 归一化解决时间戳数值过大导致的熵权过小的问题。
+-    s = normalization(s)
+-    return kexi * getR(t, t0, theta, R0) * getTauI(i, N_D, s)
++    s_normalized = normalization_iewm(s)
++    # Check if normalization failed (returned empty list or other indicator)
++    if not s_normalized: # Assuming empty list indicates failure based on implementation
++         print("Error in getAlpha_iewm: Normalization failed.")
++         return 0 # Return 0 alpha on normalization error
++
++    # Calculate time decay factor
++    time_factor = getR(t, t0, theta, R0)
++
++    # Calculate entropy weight using IEWM's TauI
++    entropy_weight = getTauI_iewm(i, N_D, s_normalized)
++
++    # Calculate final alpha
++    alpha = kexi * time_factor * entropy_weight
++
++    # Ensure alpha is within [0, 1] bounds (optional, depends on requirements)
++    alpha = max(0.0, min(1.0, alpha))
++
++    return alpha
+diff --git a/models/__pycache__/Fed.cpython-311.pyc b/models/__pycache__/Fed.cpython-311.pyc
+new file mode 100644
+index 0000000..69a2484
+Binary files /dev/null and b/models/__pycache__/Fed.cpython-311.pyc differ
+diff --git a/models/__pycache__/Fed.cpython-38.pyc b/models/__pycache__/Fed.cpython-38.pyc
+new file mode 100644
+index 0000000..5f4a4b7
+Binary files /dev/null and b/models/__pycache__/Fed.cpython-38.pyc differ
+diff --git a/models/__pycache__/Nets.cpython-311.pyc b/models/__pycache__/Nets.cpython-311.pyc
+new file mode 100644
+index 0000000..02a5b05
+Binary files /dev/null and b/models/__pycache__/Nets.cpython-311.pyc differ
+diff --git a/models/__pycache__/Nets.cpython-38.pyc b/models/__pycache__/Nets.cpython-38.pyc
+new file mode 100644
+index 0000000..a918fbc
+Binary files /dev/null and b/models/__pycache__/Nets.cpython-38.pyc differ
+diff --git a/requirements.txt b/requirements.txt
+index 079fd8a..29b0de0 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,7 +1,7 @@
+-numpy
++requests
+ torch
+ torchvision
+-matplotlib
+-requests
+ flask
+ flask_socketio
++numpy
++matplotlib
+diff --git a/run_all_experiments_node8.sh b/run_all_experiments_node8.sh
+new file mode 100755
+index 0000000..d576c31
+--- /dev/null
++++ b/run_all_experiments_node8.sh
+@@ -0,0 +1,49 @@
++#!/bin/bash
++
++# Script to run experiments for a fixed number of nodes (8)
++# iterating through epochs 1 to 10 and methods fuzzy, iewm, fedasync.
++
++NUM_NODES=8
++METHODS=("fuzzy" "iewm" "fedasync")
++EPOCHS=($(seq 1 10)) # Create a sequence from 1 to 10
++FUZZY_M_VALUES=(5) # Define fuzzy_m values to test
++
++# Ensure the script is executable
++chmod +x ./run_experiment.sh
++
++echo "Starting batch experiments for Node=${NUM_NODES}"
++echo "Epochs: 1 to 10"
++echo "Methods: ${METHODS[@]}"
++echo "Fuzzy M values (for fuzzy method): ${FUZZY_M_VALUES[@]}"
++echo "--------------------------------------------------"
++
++# Loop through each method
++for method in "${METHODS[@]}"; do
++  # Loop through each epoch
++  for epoch in "${EPOCHS[@]}"; do
++    if [ "$method" == "fuzzy" ]; then
++      # Loop through fuzzy_m values only if method is fuzzy
++      for m in "${FUZZY_M_VALUES[@]}"; do
++        echo ""
++        echo ">>> Running experiment: Method=${method}, FuzzyM=${m}, Nodes=${NUM_NODES}, Epochs=${epoch} <<<"
++        echo ""
++        # Run the individual experiment script with fuzzy_m
++        ./run_experiment.sh --node=${NUM_NODES} --epoch=${epoch} --method=${method} --fuzzy_m=${m}
++        # Optional: Add a small delay between experiments if needed
++        # sleep 5
++      done
++    else
++      # Run non-fuzzy methods without fuzzy_m loop
++      echo ""
++      echo ">>> Running experiment: Method=${method}, Nodes=${NUM_NODES}, Epochs=${epoch} <<<"
++      echo ""
++      # Run the individual experiment script without fuzzy_m
++      ./run_experiment.sh --node=${NUM_NODES} --epoch=${epoch} --method=${method}
++      # Optional: Add a small delay between experiments if needed
++      # sleep 5
++    fi
++  done
++done
++
++echo "--------------------------------------------------"
++echo "All experiments for Node=${NUM_NODES} completed."
+diff --git a/run_all_gpu_experiments_node8.sh b/run_all_gpu_experiments_node8.sh
+new file mode 100644
+index 0000000..cfa3876
+--- /dev/null
++++ b/run_all_gpu_experiments_node8.sh
+@@ -0,0 +1,50 @@
++#!/bin/bash
++
++# Script to run GPU experiments for a fixed number of nodes (8)
++# iterating through epochs 1 to 10 and methods fuzzy, iewm, fedasync.
++
++NUM_NODES=8
++GPU_ID=0 # Use GPU 0 for these experiments
++METHODS=("fuzzy" "iewm" "fedasync")
++EPOCHS=($(seq 1 10)) # Create a sequence from 1 to 10
++FUZZY_M_VALUES=(5) # Define fuzzy_m values to test
++
++# Ensure the target script is executable
++chmod +x ./run_gpu_experiment.sh
++
++echo "Starting batch GPU experiments for Node=${NUM_NODES} on GPU=${GPU_ID}"
++echo "Epochs: 1 to 10"
++echo "Methods: ${METHODS[@]}"
++echo "Fuzzy M values (for fuzzy method): ${FUZZY_M_VALUES[@]}"
++echo "--------------------------------------------------"
++
++# Loop through each method
++for method in "${METHODS[@]}"; do
++  # Loop through each epoch
++  for epoch in "${EPOCHS[@]}"; do
++    if [ "$method" == "fuzzy" ]; then
++      # Loop through fuzzy_m values only if method is fuzzy
++      for m in "${FUZZY_M_VALUES[@]}"; do
++        echo ""
++        echo ">>> Running GPU experiment: Method=${method}, FuzzyM=${m}, Nodes=${NUM_NODES}, Epochs=${epoch}, GPU=${GPU_ID} <<<"
++        echo ""
++        # Run the individual GPU experiment script with fuzzy_m and gpu id (using space separator)
++        ./run_gpu_experiment.sh --node ${NUM_NODES} --epoch ${epoch} --method ${method} --fuzzy_m ${m} --gpu ${GPU_ID}
++        # Optional: Add a small delay between experiments if needed
++        # sleep 5
++      done
++    else
++      # Run non-fuzzy methods without fuzzy_m loop
++      echo ""
++      echo ">>> Running GPU experiment: Method=${method}, Nodes=${NUM_NODES}, Epochs=${epoch}, GPU=${GPU_ID} <<<"
++      echo ""
++      # Run the individual GPU experiment script without fuzzy_m but with gpu id (using space separator)
++      ./run_gpu_experiment.sh --node ${NUM_NODES} --epoch ${epoch} --method ${method} --gpu ${GPU_ID}
++      # Optional: Add a small delay between experiments if needed
++      # sleep 5
++    fi
++  done
++done
++
++echo "--------------------------------------------------"
++echo "All GPU experiments for Node=${NUM_NODES} on GPU=${GPU_ID} completed."
+diff --git a/run_experiment.sh b/run_experiment.sh
+new file mode 100755
+index 0000000..0e2d641
+--- /dev/null
++++ b/run_experiment.sh
+@@ -0,0 +1,278 @@
++#!/bin/bash
++
++# --- Default Configuration ---
++DEFAULT_NUM_NODES=4
++DEFAULT_EPOCHS=1
++DEFAULT_AGGREGATE_METHOD="fuzzy" # Default method
++DEFAULT_FUZZY_M=2 # Default fuzzy_m value
++SERVER_PORT=8080
++# AGGREGATE_METHOD will be set by args
++DATASET="mnist"
++LEARNING_RATE=0.01
++TOTAL_TRAIN_SAMPLES=60000
++TOTAL_TEST_SAMPLES=10000
++PYTHON_CMD="python3" # Or just "python" if that's your command
++RESULTS_FILE="experiment_results.csv"
++
++# --- Argument Parsing ---
++NUM_NODES=$DEFAULT_NUM_NODES
++EPOCHS=$DEFAULT_EPOCHS
++AGGREGATE_METHOD=$DEFAULT_AGGREGATE_METHOD
++FUZZY_M=$DEFAULT_FUZZY_M # Initialize fuzzy_m
++
++# Use getopt to parse named arguments
++# Add --fuzzy_m to getopt
++TEMP=$(getopt -o '' --long node:,epoch:,method:,fuzzy_m: -n 'run_experiment.sh' -- "$@")
++if [ $? != 0 ] ; then echo "Argument parsing error. Terminating..." >&2 ; exit 1 ; fi
++eval set -- "$TEMP" # Correctly quote the arguments for eval
++
++while true; do
++  case "$1" in
++    --node ) NUM_NODES="$2"; shift 2 ;;
++    --epoch ) EPOCHS="$2"; shift 2 ;;
++    --method ) AGGREGATE_METHOD="$2"; shift 2 ;;
++    --fuzzy_m ) FUZZY_M="$2"; shift 2 ;;
++    -- ) shift; break ;;
++    * ) echo "Internal error!" ; exit 1 ;; # Should not happen with getopt
++  esac
++done
++
++# Basic validation
++if ! [[ "$NUM_NODES" =~ ^[0-9]+$ ]] || ! [[ "$EPOCHS" =~ ^[0-9]+$ ]]; then
++    echo "Error: --node and --epoch must be positive integers." >&2
++    exit 1
++fi
++# Validate method
++case "$AGGREGATE_METHOD" in
++    fuzzy|iewm|fedasync) ;; # Allowed methods
++    *) echo "Error: Invalid --method specified. Use 'fuzzy', 'iewm', or 'fedasync'." >&2 ; exit 1 ;;
++esac
++# Validate fuzzy_m if method is fuzzy
++if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
++    if ! [[ "$FUZZY_M" =~ ^[0-9]+$ ]] || [ "$FUZZY_M" -le 0 ]; then
++        echo "Error: --fuzzy_m must be a positive integer when method is 'fuzzy'." >&2
++        exit 1
++    fi
++fi
++
++# Update echo statement to include fuzzy_m if applicable
++if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
++    echo "Running experiment with Method: $AGGREGATE_METHOD, FuzzyM: $FUZZY_M, Nodes: $NUM_NODES, Epochs: $EPOCHS..."
++else
++    echo "Running experiment with Method: $AGGREGATE_METHOD, Nodes: $NUM_NODES, Epochs: $EPOCHS..."
++fi
++
++# --- Ensure Logs Directory Exists ---
++mkdir -p logs # Ensure the main logs directory exists
++
++# --- Initialize Results File ---
++EXPECTED_HEADER="Method,FuzzyM,Nodes,Epochs,Accuracy,Loss" # Added Loss column
++INITIALIZE_HEADER=false
++
++if [ -f "$RESULTS_FILE" ]; then
++    # File exists, check header
++    CURRENT_HEADER=$(head -n 1 "$RESULTS_FILE")
++    if [ "$CURRENT_HEADER" != "$EXPECTED_HEADER" ]; then
++        echo "Warning: Results file header mismatch. Found '$CURRENT_HEADER', expected '$EXPECTED_HEADER'."
++        BACKUP_FILE="${RESULTS_FILE}.$(date +%Y%m%d_%H%M%S).bak"
++        echo "Backing up existing file to $BACKUP_FILE"
++        mv "$RESULTS_FILE" "$BACKUP_FILE"
++        INITIALIZE_HEADER=true
++    fi
++else
++    # File does not exist, need to initialize
++    INITIALIZE_HEADER=true
++fi
++
++if [ "$INITIALIZE_HEADER" = true ]; then
++    echo "Initializing results file: $RESULTS_FILE with header: $EXPECTED_HEADER"
++    echo "$EXPECTED_HEADER" > "$RESULTS_FILE"
++fi
++
++# --- Start Server ---
++echo "Attempting to forcefully stop any existing server on port $SERVER_PORT..."
++# First, list matching processes to verify the pattern
++echo "Checking for existing server processes on port $SERVER_PORT..."
++pgrep -af "python.*main_server.*port ${SERVER_PORT}" || echo "No matching process found by pgrep."
++# Use pkill to find and kill the specific server process by command line match (using a slightly broader pattern)
++pkill -9 -f "python.*main_server.*port ${SERVER_PORT}" 2>/dev/null || true
++sleep 5 # Increase sleep time further to allow the port to be fully released
++echo "Port cleanup attempt finished."
++
++# Ensure the main logs directory exists
++mkdir -p logs
++# Construct server command, adding fuzzy_m if method is fuzzy
++SERVER_CMD="$PYTHON_CMD ./main_server.py --port $SERVER_PORT --aggregate $AGGREGATE_METHOD"
++if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
++    SERVER_CMD="$SERVER_CMD --fuzzy_m $FUZZY_M"
++    echo "Starting server on port $SERVER_PORT with aggregation method '$AGGREGATE_METHOD' and fuzzy_m '$FUZZY_M'..."
++else
++    echo "Starting server on port $SERVER_PORT with aggregation method '$AGGREGATE_METHOD'..."
++fi
++# Redirect server output to the main logs directory, overwriting previous log
++$SERVER_CMD > "logs/server.log" 2>&1 &
++SERVER_PID=$!
++echo "Server started with PID $SERVER_PID. Log file: logs/server.log. Waiting a few seconds for it to initialize..."
++sleep 5 # Give server time to start
++
++# --- Check if server started successfully (basic check) ---
++if ! ps -p $SERVER_PID > /dev/null; then
++    echo "Server failed to start. Check logs/server.log for details."
++    # Record failure in results file, include FuzzyM
++    FUZZY_M_VAL="N/A"
++    if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then FUZZY_M_VAL=$FUZZY_M; fi
++    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,ServerError" >> "$RESULTS_FILE"
++    exit 1
++fi
++echo "Server seems to be running."
++
++# --- Start Nodes ---
++NODE_PIDS=()
++echo "Starting $NUM_NODES nodes..."
++
++# Calculate samples per node
++TRAIN_SAMPLES_PER_NODE=$((TOTAL_TRAIN_SAMPLES / NUM_NODES))
++TEST_SAMPLES_PER_NODE=$((TOTAL_TEST_SAMPLES / NUM_NODES))
++
++for i in $(seq 0 $((NUM_NODES - 1)))
++do
++    USER_ID=$i
++    ADDRESS="Node${i}" # Simple address generation
++
++    # Calculate data indices for this node
++    START_TRAIN_INDEX=$((i * TRAIN_SAMPLES_PER_NODE))
++    END_TRAIN_INDEX=$(((i + 1) * TRAIN_SAMPLES_PER_NODE))
++    START_TEST_INDEX=$((i * TEST_SAMPLES_PER_NODE))
++    END_TEST_INDEX=$(((i + 1) * TEST_SAMPLES_PER_NODE))
++
++    # Adjust indices for the last node to include remaining samples
++    if [ $i -eq $((NUM_NODES - 1)) ]; then
++        END_TRAIN_INDEX=$TOTAL_TRAIN_SAMPLES
++        END_TEST_INDEX=$TOTAL_TEST_SAMPLES
++    fi
++
++    echo "Starting Node $USER_ID (Address: $ADDRESS) with Epochs: $EPOCHS, Train Data [$START_TRAIN_INDEX:$END_TRAIN_INDEX], Test Data [$START_TEST_INDEX:$END_TEST_INDEX]"
++
++    # Construct node command - Use the parsed EPOCHS value
++    NODE_CMD="$PYTHON_CMD ./main_node.py \
++        --user_id=$USER_ID \
++        --iid=1 \
++        --epoch=$EPOCHS \
++        --address=$ADDRESS \
++        --port=$SERVER_PORT \
++        --lr=$LEARNING_RATE \
++        --dataset=$DATASET \
++        --start_train_index=$START_TRAIN_INDEX \
++        --end_train_index=$END_TRAIN_INDEX \
++        --start_test_index=$START_TEST_INDEX \
++        --end_test_index=$END_TEST_INDEX"
++
++    # Define node log file path, include cpu identifier and fuzzy_m if method is fuzzy
++    if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
++        NODE_LOG_FILE="logs/node_${USER_ID}_cpu_${AGGREGATE_METHOD}_m${FUZZY_M}_n${NUM_NODES}_e${EPOCHS}.log"
++    else
++        NODE_LOG_FILE="logs/node_${USER_ID}_cpu_${AGGREGATE_METHOD}_n${NUM_NODES}_e${EPOCHS}.log"
++    fi
++    echo "Node log file: $NODE_LOG_FILE"
++    # Run node in background and log output to the main logs directory
++    $NODE_CMD > "$NODE_LOG_FILE" 2>&1 &
++    NODE_PIDS+=($!) # Store PID
++done
++
++# --- Wait for Nodes ---
++echo "Waiting for all nodes to complete..."
++EXIT_STATUS=0
++for pid in "${NODE_PIDS[@]}"; do
++    wait $pid
++    # Capture exit status of nodes; if any failed, record it
++    if [ $? -ne 0 ]; then
++        EXIT_STATUS=1
++        # Update error message to reflect new log location/naming (including cpu identifier)
++        if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
++            echo "Node with PID $pid failed. Check logs/node_${USER_ID}_cpu_${AGGREGATE_METHOD}_m${FUZZY_M}_n${NUM_NODES}_e${EPOCHS}.log for details."
++        else
++             echo "Node with PID $pid failed. Check logs/node_${USER_ID}_cpu_${AGGREGATE_METHOD}_n${NUM_NODES}_e${EPOCHS}.log for details."
++        fi
++    fi
++done
++
++if [ $EXIT_STATUS -ne 0 ]; then
++    echo "One or more nodes failed to complete successfully."
++    # Record failure, include FuzzyM
++    FUZZY_M_VAL="N/A"
++    if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then FUZZY_M_VAL=$FUZZY_M; fi
++    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,NodeError" >> "$RESULTS_FILE"
++    # Stop server and exit
++    echo "Stopping server (PID $SERVER_PID)..."
++    kill $SERVER_PID
++    sleep 2
++    kill -9 $SERVER_PID 2>/dev/null || true # Force kill if needed
++    exit 1
++fi
++
++echo "All nodes have completed."
++
++# --- Evaluate Final Model and Record Accuracy ---
++echo "Evaluating the final aggregated model..."
++# Run evaluation script and capture its output
++EVAL_OUTPUT=$($PYTHON_CMD ./view_aggregated_model.py --port $SERVER_PORT)
++echo "--- Evaluation Script Output Start ---"
++echo "$EVAL_OUTPUT"
++echo "--- Evaluation Script Output End ---"
++
++# Extract accuracy - Looking for "Global Model Test: Accuracy: XX.XX%"
++ACCURACY=$(echo "$EVAL_OUTPUT" | grep -oP 'Global Model Test: Accuracy: \K[0-9]+\.[0-9]+')
++# Extract loss - Looking for "Average Loss: Y.YYYY"
++LOSS=$(echo "$EVAL_OUTPUT" | grep -oP 'Average Loss: \K[0-9]+\.[0-9]+')
++
++# Prepare FuzzyM value for CSV
++FUZZY_M_VAL="N/A"
++if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then FUZZY_M_VAL=$FUZZY_M; fi
++
++# Append result to CSV file including the method, FuzzyM, Accuracy, and Loss
++if [ -n "$ACCURACY" ] && [ -n "$LOSS" ]; then
++    echo "Extracted Accuracy: $ACCURACY%, Extracted Loss: $LOSS"
++    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,$ACCURACY,$LOSS" >> "$RESULTS_FILE"
++    echo "Result recorded in $RESULTS_FILE"
++elif [ -n "$ACCURACY" ]; then
++    echo "Extracted Accuracy: $ACCURACY%, Failed to extract Loss."
++    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,$ACCURACY,LossError" >> "$RESULTS_FILE"
++    echo "Accuracy recorded, Loss extraction error. Result recorded in $RESULTS_FILE"
++else
++    echo "Could not extract accuracy (and possibly loss) from evaluation output. Check evaluation script output."
++    echo "$AGGREGATE_METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,EvalError,EvalError" >> "$RESULTS_FILE"
++    echo "Evaluation error recorded in $RESULTS_FILE"
++fi
++
++
++# --- Stop Server ---
++echo "Stopping server (PID $SERVER_PID)..."
++kill $SERVER_PID
++# Wait a moment to ensure the process is killed
++sleep 2
++if ps -p $SERVER_PID > /dev/null; then
++   echo "Server did not stop gracefully, sending SIGKILL..."
++   kill -9 $SERVER_PID
++fi
++echo "Server stopped."
++
++# --- Display Final Result Clearly ---
++echo "-----------------------------------------------------"
++if [ -n "$ACCURACY" ] && [ -n "$LOSS" ]; then
++    echo "Final Global Model Accuracy: $ACCURACY%"
++    echo "Final Global Model Loss: $LOSS"
++elif [ -n "$ACCURACY" ]; then
++    echo "Final Global Model Accuracy: $ACCURACY%"
++    echo "Final Global Model Loss: Extraction Error"
++else
++    echo "Final Global Model Accuracy: Evaluation Error"
++    echo "Final Global Model Loss: Evaluation Error"
++fi
++echo "-----------------------------------------------------"
++
++# Update final message
++if [ "$AGGREGATE_METHOD" == "fuzzy" ]; then
++    echo "Experiment finished for Method=$AGGREGATE_METHOD, FuzzyM=$FUZZY_M, Node=$NUM_NODES, Epoch=$EPOCHS."
++else
++    echo "Experiment finished for Method=$AGGREGATE_METHOD, Node=$NUM_NODES, Epoch=$EPOCHS."
++fi
+diff --git a/run_gpu_experiment.sh b/run_gpu_experiment.sh
+new file mode 100755
+index 0000000..de415f9
+--- /dev/null
++++ b/run_gpu_experiment.sh
+@@ -0,0 +1,209 @@
++#!/bin/bash
++
++# Default values
++NUM_NODES=4
++EPOCHS=1
++METHOD="fuzzy"
++FUZZY_M=2 # Default fuzzy_m value
++GPU_ID=-1 # Default to CPU, must be overridden by user
++
++# --- Parse Command Line Arguments ---
++while [[ "$#" -gt 0 ]]; do
++    case $1 in
++        --node) NUM_NODES="$2"; shift ;;
++        --epoch) EPOCHS="$2"; shift ;;
++        --method) METHOD="$2"; shift ;;
++        --fuzzy_m) FUZZY_M="$2"; shift ;;
++        --gpu) GPU_ID="$2"; shift ;; # Mandatory GPU ID
++        *) echo "Unknown parameter passed: $1"; exit 1 ;;
++    esac
++    shift
++done
++
++# --- Validate GPU ID ---
++if [ "$GPU_ID" -eq -1 ]; then
++    echo "Error: --gpu parameter is required and must be a non-negative integer (e.g., --gpu 0)."
++    exit 1
++fi
++echo "Running experiment on GPU: $GPU_ID"
++
++# --- Validate Method ---
++if [[ "$METHOD" != "fuzzy" && "$METHOD" != "iewm" && "$METHOD" != "fedasync" ]]; then
++    echo "Error: Invalid method specified. Choose 'fuzzy', 'iewm', or 'fedasync'."
++    exit 1
++fi
++
++# --- Setup Log Directory and Filename Suffix ---
++BASE_LOG_DIR="logs" # Unified log directory
++mkdir -p "$BASE_LOG_DIR"
++RUN_SUFFIX="gpu${GPU_ID}_method_${METHOD}_node_${NUM_NODES}_epoch_${EPOCHS}"
++if [ "$METHOD" == "fuzzy" ]; then
++    RUN_SUFFIX="${RUN_SUFFIX}_fuzzym${FUZZY_M}"
++fi
++echo "Logs will be saved in: $BASE_LOG_DIR with suffix: $RUN_SUFFIX"
++
++# --- Setup Results File ---
++RESULTS_FILE="gpu_experiment_results.csv" # Keep GPU results separate for now, or change if needed
++echo "GPU experiment results will be appended to: $RESULTS_FILE"
++
++# --- Server Port ---
++SERVER_PORT=8000 # Keep consistent with node default
++
++# --- Cleanup Function ---
++cleanup() {
++    echo "Cleaning up background processes..."
++    # Kill all background jobs spawned by this script
++    kill $(jobs -p) 2>/dev/null
++    wait # Wait for processes to terminate
++    echo "Cleanup complete."
++}
++trap cleanup EXIT SIGINT SIGTERM
++
++# --- Start Server ---
++# echo "Starting server on port $SERVER_PORT using GPU $GPU_ID..." # Removed redundant echo, the next one is clearer
++SERVER_LOG_FILE="$BASE_LOG_DIR/server_${RUN_SUFFIX}.log"
++echo "Starting server, logging to $SERVER_LOG_FILE"
++python main_server.py \
++    --port $SERVER_PORT \
++    --aggregate $METHOD \
++    --fuzzy_m $FUZZY_M \
++    --gpu $GPU_ID \
++    > "$SERVER_LOG_FILE" 2>&1 &
++SERVER_PID=$!
++echo "Server PID: $SERVER_PID"
++sleep 5 # Give server time to start
++
++# --- Start Nodes ---
++TOTAL_TRAIN_DATA=60000 # MNIST total training samples
++TOTAL_TEST_DATA=10000  # MNIST total test samples
++TRAIN_SLICE=$((TOTAL_TRAIN_DATA / NUM_NODES))
++TEST_SLICE=$((TOTAL_TEST_DATA / NUM_NODES))
++
++echo "Starting $NUM_NODES nodes..."
++for i in $(seq 0 $((NUM_NODES - 1)))
++do
++    START_TRAIN=$((i * TRAIN_SLICE))
++    END_TRAIN=$(((i + 1) * TRAIN_SLICE))
++    START_TEST=$((i * TEST_SLICE))
++    END_TEST=$(((i + 1) * TEST_SLICE))
++    NODE_ADDRESS="node_$i" # Simple address for identification
++
++    # echo "Starting Node $i (Address: $NODE_ADDRESS) on GPU $GPU_ID..." # Redundant echo
++    NODE_LOG_FILE="$BASE_LOG_DIR/node_${i}_${RUN_SUFFIX}.log"
++    echo "Starting Node $i, logging to $NODE_LOG_FILE"
++    # The actual command to run the node and redirect output
++    python main_node.py \
++        --epoch $EPOCHS \
++        --gpu $GPU_ID \
++        --dataset mnist \
++        --iid true \
++        --lr 0.01 \
++        --port $SERVER_PORT \
++        --address $NODE_ADDRESS \
++        --start_train_index $START_TRAIN \
++        --end_train_index $END_TRAIN \
++        --start_test_index $START_TEST \
++        --end_test_index $END_TEST \
++        --user_id $i \
++        > "$NODE_LOG_FILE" 2>&1 &
++    NODE_PIDS+=($!) # Store node PIDs if needed later, though trap handles cleanup
++    sleep 1 # Stagger node starts slightly
++done
++
++echo "All nodes started. Waiting for completion..."
++
++# --- Wait for all node background jobs to finish ---
++# We wait for node PIDs specifically, not the server
++if [ ${#NODE_PIDS[@]} -ne 0 ]; then
++    wait ${NODE_PIDS[@]}
++fi
++echo "All nodes finished."
++
++# --- Evaluate Final Model (Server should still be running) ---
++echo "Evaluating final model on GPU $GPU_ID (fetching from server)..."
++# Run evaluation script and capture output directly
++# Give the server a brief moment just in case aggregation needs finalization (optional, can be removed if not needed)
++sleep 2
++EVAL_OUTPUT=$(python view_aggregated_model.py --port $SERVER_PORT --gpu $GPU_ID 2>&1)
++echo "--- Evaluation Script Output Start ---"
++echo "$EVAL_OUTPUT"
++echo "--- Evaluation Script Output End ---"
++
++# Extract accuracy - Looking for "Global Model Test: Accuracy: XX.XX%"
++FINAL_ACC=$(echo "$EVAL_OUTPUT" | grep -oP 'Global Model Test: Accuracy: \K[0-9]+\.[0-9]+')
++# Extract loss - Looking for "Average Loss: Y.YYYY"
++FINAL_LOSS=$(echo "$EVAL_OUTPUT" | grep -oP 'Average Loss: \K[0-9]+\.[0-9]+')
++
++
++# --- Stop the Server (Now that evaluation is done) ---
++echo "Stopping server (PID: $SERVER_PID)..."
++kill $SERVER_PID
++wait $SERVER_PID 2>/dev/null # Wait for server to terminate, ignore errors if already stopped
++echo "Server stopped."
++
++# --- Record Results ---
++# Define FuzzyM value for output, default to N/A
++FUZZY_M_VAL="N/A"
++if [ "$METHOD" == "fuzzy" ]; then
++    FUZZY_M_VAL=$FUZZY_M
++fi
++
++# Check and initialize results file header if needed
++EXPECTED_HEADER="Method,FuzzyM,Nodes,Epochs,Accuracy,Loss,GPU_ID" # Added Loss column
++INITIALIZE_HEADER=false
++if [ -f "$RESULTS_FILE" ]; then
++    CURRENT_HEADER=$(head -n 1 "$RESULTS_FILE")
++    if [ "$CURRENT_HEADER" != "$EXPECTED_HEADER" ]; then
++        echo "Warning: Results file header mismatch in $RESULTS_FILE."
++        BACKUP_FILE="${RESULTS_FILE}.$(date +%Y%m%d_%H%M%S).bak"
++        echo "Backing up existing file to $BACKUP_FILE"
++        mv "$RESULTS_FILE" "$BACKUP_FILE"
++        INITIALIZE_HEADER=true
++    fi
++else
++    INITIALIZE_HEADER=true
++fi
++
++if [ "$INITIALIZE_HEADER" = true ]; then
++    echo "Initializing results file: $RESULTS_FILE with header: $EXPECTED_HEADER"
++    echo "$EXPECTED_HEADER" > "$RESULTS_FILE"
++fi
++
++# Append result to the CSV file
++# Check if both accuracy and loss were extracted successfully
++if [ -n "$FINAL_ACC" ] && [ -n "$FINAL_LOSS" ]; then
++    # Accuracy and Loss were extracted successfully
++    echo "$METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,$FINAL_ACC,$FINAL_LOSS,$GPU_ID" >> "$RESULTS_FILE"
++    echo "Result appended to $RESULTS_FILE"
++elif [ -n "$FINAL_ACC" ]; then
++    # Only Accuracy was extracted
++     echo "$METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,$FINAL_ACC,LossError,$GPU_ID" >> "$RESULTS_FILE"
++     echo "Accuracy recorded, but failed to extract Loss. Result appended to $RESULTS_FILE"
++else
++    # Accuracy extraction failed (implies loss extraction might also fail or be irrelevant)
++    echo "Could not extract accuracy (and possibly loss) from evaluation output. Check evaluation output above."
++    echo "$METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,EvalError,EvalError,$GPU_ID" >> "$RESULTS_FILE"
++    echo "Evaluation error appended to $RESULTS_FILE"
++fi
++
++
++# --- Display Final Result Clearly ---
++if [ -n "$FINAL_ACC" ] && [ -n "$FINAL_LOSS" ]; then
++    echo "-----------------------------------------------------"
++    echo "Final Global Model Accuracy: $FINAL_ACC%"
++    echo "Final Global Model Loss: $FINAL_LOSS"
++    echo "-----------------------------------------------------"
++elif [ -n "$FINAL_ACC" ]; then
++     echo "-----------------------------------------------------"
++     echo "Final Global Model Accuracy: $FINAL_ACC%"
++     echo "Final Global Model Loss: Extraction Error"
++     echo "-----------------------------------------------------"
++else
++    echo "-----------------------------------------------------"
++    echo "Final Global Model Accuracy: Evaluation Error"
++    echo "Final Global Model Loss: Evaluation Error"
++    echo "-----------------------------------------------------"
++fi
++
++echo "Experiment script finished."
++exit 0
+diff --git a/test_nodea.sh b/test/test_nodea.sh
+similarity index 84%
+rename from test_nodea.sh
+rename to test/test_nodea.sh
+index 4d0c142..59c6bd5 100644
+--- a/test_nodea.sh
++++ b/test/test_nodea.sh
+@@ -1 +1 @@
+-python3 ./main_node.py --user_id=0 --iid=1 --epoch=1 --address=0x6BE766b6a29FD1c88Db889eDC92D81B847FF2b6A --rpc_url=http://localhost:8000 --start_train_index=0 --end_train_index=10000 --start_test_index=0 --end_test_index=2000
+\ No newline at end of file
++python3 ./main_node.py --user_id=0 --iid=1 --epoch=1 --address=0x6BE766b6a29FD1c88Db889eDC92D81B847FF2b6A --rpc_url=http://localhost:8000 --start_train_index=0 --end_train_index=10000 --start_test_index=0 --end_test_index=2000
+diff --git a/test_nodeb.sh b/test/test_nodeb.sh
+similarity index 100%
+rename from test_nodeb.sh
+rename to test/test_nodeb.sh
+diff --git a/test_nodec.sh b/test/test_nodec.sh
+similarity index 100%
+rename from test_nodec.sh
+rename to test/test_nodec.sh
+diff --git a/test_noded.sh b/test/test_noded.sh
+similarity index 100%
+rename from test_noded.sh
+rename to test/test_noded.sh
+diff --git a/test_server.sh b/test/test_server.sh
+similarity index 100%
+rename from test_server.sh
+rename to test/test_server.sh
+diff --git a/test_servera.sh b/test/test_servera.sh
+similarity index 100%
+rename from test_servera.sh
+rename to test/test_servera.sh
+diff --git a/test_serverb.sh b/test/test_serverb.sh
+similarity index 100%
+rename from test_serverb.sh
+rename to test/test_serverb.sh
+diff --git a/utils/__pycache__/dataset.cpython-311.pyc b/utils/__pycache__/dataset.cpython-311.pyc
+new file mode 100644
+index 0000000..542f304
+Binary files /dev/null and b/utils/__pycache__/dataset.cpython-311.pyc differ
+diff --git a/utils/__pycache__/dataset.cpython-38.pyc b/utils/__pycache__/dataset.cpython-38.pyc
+new file mode 100644
+index 0000000..4327901
+Binary files /dev/null and b/utils/__pycache__/dataset.cpython-38.pyc differ
+diff --git a/utils/__pycache__/models.cpython-311.pyc b/utils/__pycache__/models.cpython-311.pyc
+new file mode 100644
+index 0000000..af29ff1
+Binary files /dev/null and b/utils/__pycache__/models.cpython-311.pyc differ
+diff --git a/utils/__pycache__/models.cpython-38.pyc b/utils/__pycache__/models.cpython-38.pyc
+new file mode 100644
+index 0000000..f185c03
+Binary files /dev/null and b/utils/__pycache__/models.cpython-38.pyc differ
+diff --git a/utils/__pycache__/options.cpython-311.pyc b/utils/__pycache__/options.cpython-311.pyc
+new file mode 100644
+index 0000000..1fa1902
+Binary files /dev/null and b/utils/__pycache__/options.cpython-311.pyc differ
+diff --git a/utils/__pycache__/options.cpython-38.pyc b/utils/__pycache__/options.cpython-38.pyc
+new file mode 100644
+index 0000000..a3c3a3d
+Binary files /dev/null and b/utils/__pycache__/options.cpython-38.pyc differ
+diff --git a/utils/__pycache__/sampling.cpython-311.pyc b/utils/__pycache__/sampling.cpython-311.pyc
+new file mode 100644
+index 0000000..8c9d548
+Binary files /dev/null and b/utils/__pycache__/sampling.cpython-311.pyc differ
+diff --git a/utils/__pycache__/sampling.cpython-38.pyc b/utils/__pycache__/sampling.cpython-38.pyc
+new file mode 100644
+index 0000000..4bc6ebb
+Binary files /dev/null and b/utils/__pycache__/sampling.cpython-38.pyc differ
+diff --git a/utils/options.py b/utils/options.py
+index c7f9dda..95874b8 100644
+--- a/utils/options.py
++++ b/utils/options.py
+@@ -29,6 +29,10 @@ def args_server_parser():
+     parser.add_argument('--num_channels', type=int, default=1, help="number of channels of imges")
+     parser.add_argument('--eth_rpc', type=str, default='http://localhost:8545', help='')
+     parser.add_argument('--port', type=int, default=8000, help='')
++    parser.add_argument('--aggregate', type=str, default='fuzzy', choices=['fedasync', 'fuzzy', 'iewm'],
++                        help='Aggregation method: fedasync (simple async average), fuzzy (fuzzy entropy), or iewm (information entropy)')
++    parser.add_argument('--fuzzy_m', type=int, default=2, help='Parameter m for fuzzy entropy calculation') # <--- 添加这一行
++    parser.add_argument('--gpu', type=int, default=-1, help="GPU ID for server aggregation, -1 for CPU") # <-- 添加服务器 GPU 参数
+     args = parser.parse_args()
+     return args
+ 
+@@ -40,4 +44,4 @@ def args_debug_parser():
+     parser.add_argument('--dataset', type=str, default="mnist", help="dataset")
+     parser.add_argument('--rpc_url', type=str, default="http://localhost:8545", help="rpc_url")
+     args = parser.parse_args()
+-    return args
+\ No newline at end of file
++    return args
+diff --git a/view_aggregated_model.py b/view_aggregated_model.py
+index d49370a..32257f3 100644
+--- a/view_aggregated_model.py
++++ b/view_aggregated_model.py
+@@ -1,3 +1,4 @@
++import argparse # <-- 添加导入
+ import requests
+ import torch
+ from models.Nets import CNN
+@@ -6,10 +7,19 @@ from torchvision import datasets, transforms
+ from utils.dataset import test_img
+ from torch.utils.data import DataLoader
+ 
++# 添加参数解析器
++def args_parser():
++    parser = argparse.ArgumentParser()
++    parser.add_argument('--gpu', type=int, default=-1, help="GPU ID, -1 for CPU")
++    parser.add_argument('--port', type=int, default=8000, help="Server port")
++    args = parser.parse_args()
++    return args
++
+ # 从服务器获取聚合后的模型
+-def getAggregatedModel():
+-    resp = requests.get('http://localhost:8000/newGlobalModel')
+-    
++def getAggregatedModel(port): # <-- 添加 port 参数
++    # 使用传入的 port 构建 URL
++    resp = requests.get(f'http://localhost:{port}/newGlobalModel')
++
+     # 检查响应状态码
+     if resp.status_code != 200:
+         print(f"Failed to retrieve model. Status code: {resp.status_code}")
+@@ -33,8 +43,9 @@ def getAggregatedModel():
+ 
+ 
+ # 加载模型
+-def loadModelFromServer():
+-    aggregated_model_hex = getAggregatedModel()
++def loadModelFromServer(port): # <-- 添加 port 参数
++    # 将 port 传递给 getAggregatedModel
++    aggregated_model_hex = getAggregatedModel(port)
+ 
+     if aggregated_model_hex is None:
+         print("Failed to load the model from server.")
+@@ -52,13 +63,18 @@ def loadModelFromServer():
+ 
+ 
+ if __name__ == '__main__':
+-    device = torch.device('cpu')  # 明确指定使用CPU
+-    model = loadModelFromServer()
++    args = args_parser() # <-- 解析参数
++    # 设备选择 (GPU 或 CPU)
++    device = torch.device('cuda' if torch.cuda.is_available() and args.gpu != -1 else 'cpu')
++    print(f"Using device: {device}") # <-- 打印使用的设备
++
++    # 修改 loadModelFromServer 调用以传递端口
++    model = loadModelFromServer(args.port)
+ 
+     if model is None:
+         print("Model loading failed.")
+     else:
+-        model.to(device)  # 将模型移动到CPU
++        model.to(device) # 将模型移动到选择的设备
+         model.eval()
+ 
+         # 加载测试数据集
+@@ -67,8 +83,9 @@ if __name__ == '__main__':
+ 
+         # 使用测试函数进行模型评估
+         batch_size = 64
+-        acc_test, loss_test = test_img(model, dataset_test, batch_size, gpu=-1)  # 确保gpu参数为-1
++        # 将 args.gpu 传递给 test_img
++        acc_test, loss_test = test_img(model, dataset_test, batch_size, gpu=args.gpu)
+ 
+         print(f"Global Model Test: Accuracy: {acc_test * 100:.2f}%, Average Loss: {loss_test:.4f}")
+ 
+-    print(f"Using device: {device}")
++    # 移除了重复的 device 打印

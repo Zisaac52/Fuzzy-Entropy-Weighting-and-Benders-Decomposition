@@ -5,6 +5,7 @@ NUM_NODES=4
 EPOCHS=1
 METHOD="fuzzy"
 FUZZY_M=2 # Default fuzzy_m value
+FUZZY_R=0.5 # Default fuzzy_r value
 GPU_ID=-1 # Default to CPU, must be overridden by user
 
 # --- Parse Command Line Arguments ---
@@ -14,6 +15,7 @@ while [[ "$#" -gt 0 ]]; do
         --epoch) EPOCHS="$2"; shift ;;
         --method) METHOD="$2"; shift ;;
         --fuzzy_m) FUZZY_M="$2"; shift ;;
+        --fuzzy_r) FUZZY_R="$2"; shift ;; # Add fuzzy_r parsing
         --gpu) GPU_ID="$2"; shift ;; # Mandatory GPU ID
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
@@ -32,13 +34,20 @@ if [[ "$METHOD" != "fuzzy" && "$METHOD" != "iewm" && "$METHOD" != "fedasync" ]];
     echo "Error: Invalid method specified. Choose 'fuzzy', 'iewm', or 'fedasync'."
     exit 1
 fi
+# Validate fuzzy_r if method is fuzzy
+if [ "$METHOD" == "fuzzy" ]; then
+    if ! [[ "$FUZZY_R" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "Error: --fuzzy_r must be a number (e.g., 0.5) when method is 'fuzzy'." >&2
+        exit 1
+    fi
+fi
 
 # --- Setup Log Directory and Filename Suffix ---
 BASE_LOG_DIR="logs" # Unified log directory
 mkdir -p "$BASE_LOG_DIR"
 RUN_SUFFIX="gpu${GPU_ID}_method_${METHOD}_node_${NUM_NODES}_epoch_${EPOCHS}"
 if [ "$METHOD" == "fuzzy" ]; then
-    RUN_SUFFIX="${RUN_SUFFIX}_fuzzym${FUZZY_M}"
+    RUN_SUFFIX="${RUN_SUFFIX}_fuzzym${FUZZY_M}_fuzzyr${FUZZY_R}" # Add fuzzy_r to suffix
 fi
 echo "Logs will be saved in: $BASE_LOG_DIR with suffix: $RUN_SUFFIX"
 
@@ -67,6 +76,7 @@ python main_server.py \
     --port $SERVER_PORT \
     --aggregate $METHOD \
     --fuzzy_m $FUZZY_M \
+    --fuzzy_r $FUZZY_R \
     --gpu $GPU_ID \
     > "$SERVER_LOG_FILE" 2>&1 &
 SERVER_PID=$!
@@ -142,14 +152,16 @@ wait $SERVER_PID 2>/dev/null # Wait for server to terminate, ignore errors if al
 echo "Server stopped."
 
 # --- Record Results ---
-# Define FuzzyM value for output, default to N/A
+# Define FuzzyM and FuzzyR values for output, default to N/A
 FUZZY_M_VAL="N/A"
+FUZZY_R_VAL="N/A"
 if [ "$METHOD" == "fuzzy" ]; then
     FUZZY_M_VAL=$FUZZY_M
+    FUZZY_R_VAL=$FUZZY_R
 fi
 
 # Check and initialize results file header if needed
-EXPECTED_HEADER="Method,FuzzyM,Nodes,Epochs,Accuracy,Loss,GPU_ID" # Added Loss column
+EXPECTED_HEADER="Method,FuzzyM,FuzzyR,Nodes,Epochs,Accuracy,Loss,GPU_ID" # Added FuzzyR column
 INITIALIZE_HEADER=false
 if [ -f "$RESULTS_FILE" ]; then
     CURRENT_HEADER=$(head -n 1 "$RESULTS_FILE")
@@ -173,16 +185,16 @@ fi
 # Check if both accuracy and loss were extracted successfully
 if [ -n "$FINAL_ACC" ] && [ -n "$FINAL_LOSS" ]; then
     # Accuracy and Loss were extracted successfully
-    echo "$METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,$FINAL_ACC,$FINAL_LOSS,$GPU_ID" >> "$RESULTS_FILE"
+    echo "$METHOD,$FUZZY_M_VAL,$FUZZY_R_VAL,$NUM_NODES,$EPOCHS,$FINAL_ACC,$FINAL_LOSS,$GPU_ID" >> "$RESULTS_FILE" # Added FuzzyR
     echo "Result appended to $RESULTS_FILE"
 elif [ -n "$FINAL_ACC" ]; then
     # Only Accuracy was extracted
-     echo "$METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,$FINAL_ACC,LossError,$GPU_ID" >> "$RESULTS_FILE"
+     echo "$METHOD,$FUZZY_M_VAL,$FUZZY_R_VAL,$NUM_NODES,$EPOCHS,$FINAL_ACC,LossError,$GPU_ID" >> "$RESULTS_FILE" # Added FuzzyR
      echo "Accuracy recorded, but failed to extract Loss. Result appended to $RESULTS_FILE"
 else
     # Accuracy extraction failed (implies loss extraction might also fail or be irrelevant)
     echo "Could not extract accuracy (and possibly loss) from evaluation output. Check evaluation output above."
-    echo "$METHOD,$FUZZY_M_VAL,$NUM_NODES,$EPOCHS,EvalError,EvalError,$GPU_ID" >> "$RESULTS_FILE"
+    echo "$METHOD,$FUZZY_M_VAL,$FUZZY_R_VAL,$NUM_NODES,$EPOCHS,EvalError,EvalError,$GPU_ID" >> "$RESULTS_FILE" # Added FuzzyR
     echo "Evaluation error appended to $RESULTS_FILE"
 fi
 

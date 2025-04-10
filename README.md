@@ -104,6 +104,34 @@
 
 所有批量实验的结果将分别记录在 `experiment_results.csv` (CPU) 和 `gpu_experiment_results.csv` (GPU) 中。
 
+### 参数网格搜索 (Fuzzy Entropy - GPU)
+
+为了系统地评估模糊熵参数 `m` 和 `r` 对模型性能的影响，项目提供了网格搜索脚本。
+
+**目的**: 寻找在特定实验设置（如节点数、本地训练轮数）下最优的 `m` 和 `r` 组合。
+
+**运行网格搜索脚本**:
+
+*   使用 `run_grid_search_gpu.sh` 脚本在 GPU 上执行网格搜索。
+    ```bash
+    ./run_grid_search_gpu.sh
+    ```
+*   脚本内部定义了固定的实验参数（例如，当前设置为 GPU 0, 8 个节点, 2 个本地轮次）以及需要遍历的 `m` 和 `r` 值列表。
+*   每次实验运行后，其结果（准确率、损失率等）会被提取并追加到特定的 CSV 文件中，文件名格式为 `gpu_grid_search_results_node<节点数>_epoch<轮数>.csv` (例如 `gpu_grid_search_results_node8_epoch2.csv`)。
+
+**分析网格搜索结果**:
+
+*   使用 `analyze_grid_search.py` 脚本来分析网格搜索生成的 CSV 结果文件。
+    ```bash
+    python analyze_grid_search.py [--file <results_csv_file>] [--nodes <num_nodes>] [--epochs <num_epochs>]
+    ```
+*   脚本默认会读取与当前设置（8 节点, 2 轮）对应的结果文件 (`gpu_grid_search_results_node8_epoch2.csv`)。您可以通过 `--file`, `--nodes`, `--epochs` 参数指定不同的文件或设置。
+*   脚本会生成准确率和损失率的热力图、轮廓图和三维表面图，以可视化不同 (m, r) 组合下的性能，并将图表保存在 `plots_node<节点数>_epoch<轮数>/` 目录下 (例如 `plots_node8_epoch2/`)。
+
+**结果摘要 (示例: 8 节点, 2 轮)**:
+
+*   在 8 节点、2 本地轮次的设置下，观察到表现较优的参数组合为 (m=5, r=0.7) 和 (m=3, r=0.2)。减少本地训练轮数有助于放大不同参数组合间的性能差异。
+
 ## 支持的配置
 
 *   **数据集**:
@@ -135,6 +163,8 @@
 *   `run_gpu_experiment.sh`: 运行单个 GPU 实验的脚本。
 *   `run_all_experiments_node8.sh`: 运行批量 CPU 实验的脚本 (针对 8 节点)。
 *   `run_all_gpu_experiments_node8.sh`: 运行批量 GPU 实验的脚本 (针对 8 节点)。
+*   `run_grid_search_gpu.sh`: 运行模糊熵参数网格搜索的脚本 (GPU)。
+*   `analyze_grid_search.py`: 分析网格搜索结果并生成图表的脚本。
 *   `view_aggregated_model.py`: 用于在实验结束后评估最终全局模型的脚本。
 *   `requirements.txt`: 项目依赖库列表。
 *   `experiment_results.csv`: 存储 CPU 实验结果的 CSV 文件。

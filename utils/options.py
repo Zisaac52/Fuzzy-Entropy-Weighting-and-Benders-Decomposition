@@ -32,6 +32,7 @@ def args_server_parser():
     parser.add_argument('--aggregate', type=str, default='fuzzy', choices=['fedasync', 'fuzzy', 'iewm'],
                         help='Aggregation method: fedasync (simple async average), fuzzy (fuzzy entropy), or iewm (information entropy)')
     parser.add_argument('--fuzzy_m', type=int, default=2, help='Parameter m for fuzzy entropy calculation') # <--- 添加这一行
+    parser.add_argument('--fuzzy_r', type=float, default=0.5, help='Parameter r for fuzzy entropy calculation (similarity tolerance)') # <-- 添加 fuzzy_r 参数
     parser.add_argument('--gpu', type=int, default=-1, help="GPU ID for server aggregation, -1 for CPU") # <-- 添加服务器 GPU 参数
     args = parser.parse_args()
     return args

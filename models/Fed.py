@@ -90,7 +90,8 @@ def fuzzy_entropy(data, m=5, r=0.5):
         return 0
 
 
-def getWk(N_D, s, s_i, fuzzy_m=5): # Add fuzzy_m parameter
+# Modify getWk to accept fuzzy_r and pass it to fuzzy_entropy
+def getWk(N_D, s, s_i, fuzzy_m=5, fuzzy_r=0.5): # Add fuzzy_r parameter
     """
     计算权重 (BAFL specific - uses fuzzy_entropy)
     保持原有的熵权法计算逻辑：
@@ -104,16 +105,16 @@ def getWk(N_D, s, s_i, fuzzy_m=5): # Add fuzzy_m parameter
             return 1.0 / len(s) if len(s) > 0 else 1.0 # Avoid division by zero if s is empty
 
         # 计算当前指标的熵值
-        # Pass fuzzy_m to fuzzy_entropy
-        entropy = fuzzy_entropy(s_i, m=fuzzy_m)
+        # Pass fuzzy_m and fuzzy_r to fuzzy_entropy
+        entropy = fuzzy_entropy(s_i, m=fuzzy_m, r=fuzzy_r)
 
         # 计算所有指标的熵值之和
         sum_entropy = 0
         valid_metrics_count = 0 # Count metrics that are not empty
         for i in range(len(s)):
             if s[i]: # Check if the metric list is not empty
-                # Pass fuzzy_m to fuzzy_entropy
-                sum_entropy += fuzzy_entropy(s[i], m=fuzzy_m)
+                # Pass fuzzy_m and fuzzy_r to fuzzy_entropy
+                sum_entropy += fuzzy_entropy(s[i], m=fuzzy_m, r=fuzzy_r)
                 valid_metrics_count += 1
 
         if valid_metrics_count == 0: # Handle case where all metric lists in s are empty
@@ -140,7 +141,8 @@ def getWk(N_D, s, s_i, fuzzy_m=5): # Add fuzzy_m parameter
         return 1.0 / len(s) if len(s) > 0 else 1.0
 
 
-def getTauI(i, N_D, s, fuzzy_m=2): # Add fuzzy_m parameter
+# Modify getTauI to accept fuzzy_r and pass it to getWk
+def getTauI(i, N_D, s, fuzzy_m=2, fuzzy_r=0.5): # Add fuzzy_r parameter
     """
     计算综合得分 (BAFL specific - uses getWk with fuzzy_entropy)
     保持原有的加权求和逻辑
@@ -153,8 +155,8 @@ def getTauI(i, N_D, s, fuzzy_m=2): # Add fuzzy_m parameter
         for k in range(len(s)):
             # Check if s[k] is valid and has element at index i
             if s[k] and len(s[k]) > i:
-                # Pass fuzzy_m to getWk
-                weight = getWk(N_D, s, s[k], fuzzy_m=fuzzy_m) # BAFL's getWk
+                # Pass fuzzy_m and fuzzy_r to getWk
+                weight = getWk(N_D, s, s[k], fuzzy_m=fuzzy_m, fuzzy_r=fuzzy_r) # BAFL's getWk
                 # Ensure s[k][i] is numeric before multiplication
                 try:
                     value = float(s[k][i])
@@ -209,7 +211,8 @@ def normalization(s):
         return 0
 
 
-def getAlpha(kexi, t, t0, theta, R0, i, N_D, s, fuzzy_m=2): # Add fuzzy_m parameter
+# Modify getAlpha to accept fuzzy_r and pass it to getTauI
+def getAlpha(kexi, t, t0, theta, R0, i, N_D, s, fuzzy_m=2, fuzzy_r=0.5): # Add fuzzy_r parameter
     """
     计算最终权重 (BAFL specific - uses BAFL's normalization and getTauI)
     保持原有的时间衰减和熵权重组合逻辑
@@ -227,8 +230,8 @@ def getAlpha(kexi, t, t0, theta, R0, i, N_D, s, fuzzy_m=2): # Add fuzzy_m parame
         time_factor = getR(t, t0, theta, R0)
 
         # 计算熵权重
-        # Pass fuzzy_m to getTauI
-        entropy_weight = getTauI(i, N_D, s_norm, fuzzy_m=fuzzy_m) # BAFL's getTauI
+        # Pass fuzzy_m and fuzzy_r to getTauI
+        entropy_weight = getTauI(i, N_D, s_norm, fuzzy_m=fuzzy_m, fuzzy_r=fuzzy_r) # BAFL's getTauI
 
         # 计算最终权重 (保持原有公式)
         alpha = kexi * time_factor * entropy_weight

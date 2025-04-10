@@ -4,7 +4,8 @@
 # iterating through epochs 1 to 10 and methods fuzzy, iewm, fedasync.
 
 NUM_NODES=8
-METHODS=("fuzzy" "iewm" "fedasync")
+# METHODS=("fuzzy" "iewm" "fedasync")
+METHODS=("iewm" "fedasync") # Exclude fuzzy for this script
 EPOCHS=($(seq 1 10)) # Create a sequence from 1 to 10
 FUZZY_M_VALUES=(5) # Define fuzzy_m values to test
 
