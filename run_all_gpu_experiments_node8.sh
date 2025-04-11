@@ -5,7 +5,7 @@
 
 NUM_NODES=8
 GPU_ID=0 # Use GPU 0 for these experiments
- METHODS=("fuzzy" "iewm" "fedasync") # all experiment methods
+METHODS=("fuzzy" "iewm" "fedasync") # all experiment methods
 # METHODS=("iewm" "fedasync") # Exclude fuzzy for this script
 EPOCHS=($(seq 1 10)) # Create a sequence from 1 to 10
 FUZZY_M_VALUES=(5) # Define fuzzy_m values to test
