@@ -1,0 +1,15 @@
+Metric,Value
+seed,2248593188
+num_clients,5
+num_helpers,1
+heterogeneity,medium
+status,Terminated Prematurely
+total_gbd_time_s,2.3210723400115967
+total_iterations,1
+final_objective,
+final_lb,-inf
+final_ub,inf
+final_gap,
+best_solution_int,None
+best_solution_cont,None
+
